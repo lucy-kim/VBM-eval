@@ -1,7 +1,7 @@
 ---
-title: "VBM analysis"
-author: "Simon Jones, Lucy Kim"
-date: "9/13/2017"
+title: "VBM Evaluation"
+author: "Lucy Kim, Simon Jones"
+date: "3/19/2018"
 output: html_document
 ---
 
@@ -10,7 +10,7 @@ output: html_document
 ## Motivation
 The NYU Langone Health has been consistently ranked high in terms of quality but also high in terms of costs per case among academic medical centers nationally even after the adjustment for the case mix and wage indices. Thus, the NYULMH implemented value-based management program to achieve reducing costs and improving value of care which can be defined as quality achieved per dollar spent. We aim to evaluate the impact of this program in terms of variable direct cost per case and quality, and estimate cost savings to date.
 
-This analysis code marks Sep 2014 as the first month of the post-intervention period. 
+This analysis code marks May 2014 as the first month of the post-intervention period. 
 
 ## Data set up
 ```{r}
@@ -40,7 +40,7 @@ library(MASS)
 library(reshape2)
 library(scales)
 
-load("~/Box Sync/VBM/Data/vbmR/sample-full2017.RData")
+load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014.RData")
 # load("~/Box Sync/VBM/Data/sample-full2017-raw.RData")
 
 # pat <- read_excel("~/Box Sync/VBM/Data/Patient Level Data with expense grouping deidentified 1052017.xlsx", guess_max=288364)
@@ -62,7 +62,7 @@ pat2$DischargeDateD   <- as.Date( pat2$`Discharge Date` )
 min(pat2$DischargeDateD ) #  "2016-09-01"
 max(pat2$DischargeDateD ) #  "2017-12-31"
 
-# change race category labels using the xwalk 
+# recode race categories in the new discharge data for FY 2017 using the xwalk 
 racexwalk <- read.csv("~/Box Sync/VBM/Data/race_xwalk.csv")
 test <- merge(pat2, racexwalk, by.x="Race", by.y="alphabet", all.x = T)
 test$Race <- test$race_des
@@ -135,10 +135,9 @@ NROW(patUse)
 exclude DRG weight = 0 or MS-DRG = 998 or 999
 ```{r}
 # drop MS-DRG = 999
-table(patUse$`MS DRG Weight (CMI)`)
+summary(patUse$`MS DRG Weight (CMI)`)
 patUse <- subset(patUse, `MS-DRG`!=999 & `MS-DRG`!=998 & `MS DRG Weight (CMI)`!=0)
 summary(patUse$`MS DRG Weight (CMI)`)
-table(patUse$`MS DRG Weight (CMI)`)
 NROW(patUse)
 ```
 
@@ -569,7 +568,7 @@ create time trend, post dummmy, time post intervention trend variables
 ```{r}
 allDates <- sort(unique(patUse$DischargeDateMonth))
 
-lastpremonthidx <- 36 # 36 for Aug 2014
+lastpremonthidx <- 32 # 36 for Aug 2014
 nmonths <- length(allDates)
 
 # will drop April 2014 - Aug 2014 later as this is a transition period (first VBM mtg on 4/19/2014)
@@ -814,7 +813,7 @@ patUse2 <- patUse2[complete.cases(patUse2[, c("DischargeDateMonth")]),]
 
 save as project
 ```{r}
-save(pat, pat2, pat3, patUse, patUse2, dateLookUp, file="~/Box Sync/VBM/Data/vbmR/sample-full2017.RData")
+save(pat, pat2, pat3, patUse, patUse2, dateLookUp, file="~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014.RData")
 
 write.csv(patUse2, "~/Box Sync/VBM/Data/patUse2.csv", col.names=TRUE)
 ```
@@ -823,7 +822,7 @@ write.csv(patUse2, "~/Box Sync/VBM/Data/patUse2.csv", col.names=TRUE)
 
 ## Discharge-level analysis
 ```{r}
-load("~/Box Sync/VBM/Data/vbmR/sample-full2017.RData")
+load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014.RData")
 
 ```
 
@@ -1216,10 +1215,15 @@ ggplot(patUse3, aes(tvdc_cpi_cmi)) +
 
 just before running regressions, suppress to NA the discharge dates 9/2012 - 8/2013
 ```{r}
-# patUse3 <- subset(patUse2, (DischargeDateD < "2012-09-01" | DischargeDateD > "2013-08-31") )
+load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014.RData")
+
+# patUse3 <- subset(patUse2, DischargeDateMonth < "201209" | DischargeDateMonth > "201308")
 
 # using Sept 2014 as the first post month
-patUse3 <- subset(patUse2, DischargeDateMonth < "201209" | DischargeDateMonth > "201308")
+patUse3 <- subset(patUse2, DischargeDateMonth < "201209" |(DischargeDateMonth > "201308" & DischargeDateMonth < "201405") | DischargeDateMonth >= "201409")
+patUse3$int[patUse3$DischargeDateMonth < "201409"] <- 0
+patUse3$tpostInt[patUse3$DischargeDateMonth < "201409"] <- 0
+patUse3$tpostInt[patUse3$DischargeDateMonth >= "201409"] <- patUse3$tpostInt[patUse3$DischargeDateMonth >= "201409"] -4
 
 test <- ddply(patUse3, .(DischargeDateMonth), summarise, int = mean(int), tpostInt = mean(tpostInt), t = mean(t))
 
@@ -1339,7 +1343,7 @@ for (col in costs_cpi) {
             apply.coef = pct_chng,
             dep.var.labels = depv,
             covariate.labels = c("Time","Intervention","Time After Intervention"),
-            out=paste("~/Dropbox/Research/VBM/results/", col, "medical2.htm", sep=""))
+            out=paste("~/Dropbox/Research/VBM/results/", col, "medical.htm", sep=""))
             # out=paste("/Users/kunheekim/Dropbox/Research/VBM/results/", col, "2.htm", sep=""))
             # out=paste("/home/hcmg/kunhee/VBM/", col, ".htm", sep=""))
 }
@@ -1399,7 +1403,7 @@ for (col in costs_cpi) {
             apply.coef = pct_chng,
             dep.var.labels = depv,
             covariate.labels = c("Time","Intervention","Time After Intervention"),
-            out=paste("~/Dropbox/Research/VBM/results/", col, "surgical2.htm", sep=""))
+            out=paste("~/Dropbox/Research/VBM/results/", col, "surgical.htm", sep=""))
             # out=paste("/Users/kunheekim/Dropbox/Research/VBM/results/", col, "2.htm", sep=""))
             # out=paste("/home/hcmg/kunhee/VBM/", col, ".htm", sep=""))
 }
@@ -2430,7 +2434,7 @@ The following analysis is at the aggregate level using monthly data.
 
 export patient discharge level data to get coefficients on month dummies while controlling for patient vars
 ```{r}
-load("~/Box Sync/VBM/Data/vbmR/sample-full2017.RData")
+load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014.RData")
 
 patUse3 <- subset(patUse2, (DischargeDateMonth < "201209" | DischargeDateMonth > "201308"))
 write.csv(patUse3, file="~/Box Sync/VBM/Data/patUse3.csv")
@@ -3626,7 +3630,7 @@ ggsave("~/Dropbox/Research/VBM/results/cost_cases_trajectory_other2.pdf", width=
 construct the mean direct cost & mean total cost per quarter for NYU using the internal data applying the same restrictions as when extracting Vizient data
 (copy and pasted from above)
 ```{r}
-load("~/Box Sync/VBM/Data/vbmR/sample-full2017.RData")
+load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014.RData")
 
 #subset the first data to Sep 2011 - Aug 2016 (exclude FY 11 & 2017)
 pat3 <- subset(pat, pat$DischargeDateD >= "2011-09-01" & pat$DischargeDateD < "2016-09-01")

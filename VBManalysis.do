@@ -1,11 +1,12 @@
 * estimate other models using cluster SE & two-part model
 
 cd ~/VBM
-capture ssc install twopm
 capture ssc install estout
 set seed 39103
 
-/*insheet using patUse2.csv, comma nonames clear
+/* insheet using patUse3.csv, comma nonames clear
+
+*drop April 2014 - Aug 2014 (Transition period) & FY 2013 (hurricane)
 
 tostring v1, replace
 replace v1 = "0" in 1/1
@@ -52,13 +53,19 @@ destring PATIENT_ID, replace
 *cpi
 
 *destring cost & other variables
-foreach v of varlist Time Intervention tpostInt CMI ynel* {
+foreach v of varlist Time Intervention tpostInt CMI {
   destring `v', replace
+}
+foreach v of varlist ynel* {
+  gen x_`v' = `v'=="Present" & `v'!=""
+  replace x_`v' = . if `v'==""
+  drop `v'
+  rename x_`v' `v'
 }
 drop weightel*
 
-*create CMI deciles
-xtile cmiD = CMI, n(10)
+/* *create CMI deciles
+xtile cmiD = CMI, n(10) */
 
 xi i.season i.surgical i.female i.AgeGroup i.raceGroup i.ins i.ym i.cmiD
 
@@ -67,7 +74,7 @@ lab var Time "Time"
 lab var Intervention "Intervention"
 
 compress
-saveold patUse2, replace*/
+saveold patUse3, replace */
 
 *----------------------------
 *check if data correct monthly - yes
@@ -110,7 +117,7 @@ foreach y of varlist ICU_cpi {
 *----------------------------
 *for aggregate ITS, create Monthly total costs after adjusting for the patient characteristics using coefficient on month dummies
 
-use patUse2, clear
+use patUse3, clear
 
 sum ym
 loc min `r(min)'

@@ -4,15 +4,25 @@ cd ~/VBM
 capture ssc install elixhauser
 set seed 123
 
-use pat_1052017, clear
+loc f "pat_elix_03162018.csv"
+insheet using "`f'", clear names
 
-gen icd10 = Enc___Primary_ICD10_Diagnosis
-gen icd10p = Enc___Primary_ICD10_Surgical_Pro
-gen icd9 = Enc___Primary_ICD9_Diagnosis
-gen icd9p = Enc___Primary_ICD9_Surgical_Proc
+rename patientid PATIENT_ID
+rename encprimaryicd10diagnosis icd10
+rename encprimaryicd10surgicalprocedure icd10p
+rename encprimaryicd9diagnosis icd9
+rename encprimaryicd9surgicalprocedure icd9p
+drop v1
 
-gen icd9missing = icd9 =="0" | icd9==""
-gen icd10missing = icd10==""
+gen icd9missing = icd9 =="0" | icd9=="NA"
+gen icd10missing = icd10=="NA"
+
+*convert to stata date
+split dischargedate, p("-")
+destring dischargedate?, replace
+gen Discharge_Date = mdy(dischargedate2, dischargedate3, dischargedate1)
+format Discharge_Date %d
+drop dischargedate dischargedate?
 
 gen ym = ym(year(Discharge_Date), month(Discharge_Date))
 format ym %tm
@@ -28,6 +38,10 @@ drop *missing
 count
 loc tot = `r(N)'
 
+foreach v of varlist icd* {
+  replace `v' = "" if `v'=="NA"
+}
+
 tempfile tmp
 save `tmp'
 
@@ -36,10 +50,7 @@ use `tmp', clear
 /*sample 100, count*/
 keep if ym < ym(2015,10)
 drop icd10*
-keep if icd9!="" | icd9p!=.
-gen icd9p_s = string(icd9p)
-drop icd9p
-rename icd9p_s icd9p
+keep if icd9!="" | icd9p!=""
 count
 des
 
@@ -80,12 +91,12 @@ assert dup==0
 drop dup
 
 count
-/**assert that total obs count for the appended data is the same as original data
+*assert that total obs count for the appended data is the same as original data
 count
-assert `r(N)'==`tot'*/
+assert `r(N)'==`tot'
 
 compress
-save elixhauser, replace
+saveold elixhauser, replace
 outsheet using elixhauser.csv, comma names replace
 
 *-----------------------
