@@ -40,11 +40,11 @@ library(MASS)
 library(reshape2)
 library(scales)
 
-load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014.RData")
+# load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014 (Lucy.Kim@nyumc.org 2).RData")
 # load("~/Box Sync/VBM/Data/sample-full2017-raw.RData")
 
-# pat <- read_excel("~/Box Sync/VBM/Data/Patient Level Data with expense grouping deidentified 1052017.xlsx", guess_max=288364)
-# pat2 <- read_excel("~/Box Sync/VBM/Data/Sep 2016 - Dec 2017 VBM Paper deintentified.xlsx", guess_max=94160)
+pat <- read_excel("~/Box Sync/VBM/Data/Patient Level Data with expense grouping deidentified 1052017.xlsx", guess_max=288364)
+pat2 <- read_excel("~/Box Sync/VBM/Data/Sep 2016 - Dec 2017 VBM Paper deintentified.xlsx", guess_max=94160)
 
 NROW(pat)
 # str(pat)
@@ -87,12 +87,6 @@ pat3$`Discharge Service` <- as.numeric(pat3$`Discharge Service`)
 pat3$`Discharge Disposition` <- as.numeric(pat3$`Discharge Disposition` )
 pat3$`MS-DRG` <- as.numeric(pat3$`MS-DRG`)
 pat3$`NY-DRG` <- as.numeric(pat3$`NY-DRG`)
-
-# sum(is.na(pat3$`Enc - Primary ICD10 Surgical Procedure`))
-# pat3$`Enc - Primary ICD10 Surgical Procedure` <- as.character(pat3$`Enc - Primary ICD10 Surgical Procedure`)
-# # pat3 %<>% mutate_all(funs(ifelse(is.na(.)&is.numeric(.),NA,.)))
-# sum(is.na(pat3$`NYU Vizient SSI Infection Flag`))
-# pat3$`NYU Vizient SSI Infection Flag` <- as.character(pat3$`NYU Vizient SSI Infection Flag`)
 
 # append the two datasets
 patUse <- bind_rows(pat3, pat2, .id="id" )
@@ -143,67 +137,31 @@ NROW(patUse)
 
 
 Exclude Rehab hospital & rehab discharges by using reporting department = Rehab or Psych (these are not typically paid using DRG)
-```{r}
-# patUse <- patUse[(str_sub(patUse$`EPIC Discharge Dept_Desc`,1,1) != "X" & str_sub(patUse$`EPIC Discharge Dept_Desc`,1,1) != "L" )| is.na(patUse$`EPIC Discharge Dept_Desc`) , ]
-# patUse <- subset(patUse, `MS-DRG Type`!="REHAB")
 
+1) exclude missing / unknown DRGs or reporting departments 
+```{r}
 # exclude MS-DRG type is missing and reporting department is missing
 patUse <- patUse[complete.cases(patUse[, c("NYU Reporting Department â€“ Most Recent_Desc", "MS-DRG Type")]),]
 
 # exclude if reporting department is unknown
 patUse <- subset(patUse, `NYU Reporting Department â€“ Most Recent_Desc`!="UNK")
+```
 
+2) define rehab pats when reporting dept = Rehab or MS-DRG = 945/946 & define psych pats when reporting dept = Psych  
+```{r}
 # rehab dept can use non-rehab diagnosis
 table(patUse$`NYU Reporting Department â€“ Most Recent_Desc`, patUse$`MS-DRG`==945 | patUse$`MS-DRG`==946)
 
 # distribution of medical, surgical, rehab patients by reporting dept
 table(patUse$`NYU Reporting Department â€“ Most Recent_Desc`, patUse$`MS-DRG Type`)
 
-# define rehab as Report dept=Rehab & MS DRG=945/946
-# patUse$pattype <- factor(ifelse( patUse$`NYU Reporting Department â€“ Most Recent_Desc`=="Rehabilitation Medicine", 1, ifelse((patUse$`MS-DRG`==945 | patUse$`MS-DRG`==946) & patUse$`NYU Reporting Department â€“ Most Recent_Desc`=="Rehabilitation Medicine", 2, ifelse(patUse$`MS-DRG Type`=="MED", 3, ifelse(patUse$`MS-DRG Type`=="SURG", 4, 5))), labels=c("Report dept=Rehab", "Report dept=Rehab & MS DRG=945/946", "Medical", "Surgical", "Unknown")))
-
+# create patient type categories
 patUse$pattype <- factor(ifelse( (patUse$`MS-DRG`==945 | patUse$`MS-DRG`==946) & patUse$`NYU Reporting Department â€“ Most Recent_Desc`=="Rehabilitation Medicine", 1, ifelse( patUse$`NYU Reporting Department â€“ Most Recent_Desc`=="Psychiatry", 2, ifelse(patUse$`MS-DRG Type`=="MED", 3, ifelse(patUse$`MS-DRG Type`=="SURG", 4, 5)))), labels=c("Report dept=Rehab & MS DRG=945/946", "Report dept=Psych", "Medical", "Surgical", "Unknown"))
 table(patUse$pattype)
+```
 
-# plot # medical, surgical, rehab discharges in each month?
-test <- ddply(patUse, .(DischargeDateMonth, pattype), summarise, N=length(pattype))
-test$N[test$DischargeDateMonth >= "201209" & test$DischargeDateMonth <= "201308"] <- NA
-
-ggplot(test, aes(x=DischargeDateMonth, y=N, colour=pattype, group=pattype)) +
-  geom_line(base_size=10) +
-  labs(x="Month", y="Number of discharges",
-       title="Number of medical, surgical, rehab patient discharges by month") +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1),
-        legend.position="bottom", legend.title=element_blank()) +
-  geom_vline(aes(xintercept=32), colour="red") +
-  geom_vline(aes(xintercept=50), colour="blue") +
-  scale_y_continuous(limits = c(0,2400),
-                     breaks=seq(0,2400,200))
-ggsave("~/Dropbox/Research/VBM/results/num_discharges1.png", width=20, height=10, units="cm")
-
-# define rehab as Report dept=Rehab only
-patUse$pattype <- factor(ifelse( patUse$`NYU Reporting Department â€“ Most Recent_Desc`=="Rehabilitation Medicine", 1, ifelse(patUse$`MS-DRG Type`=="MED", 2, ifelse(patUse$`MS-DRG Type`=="SURG", 3, 4))), labels=c("Report dept=Rehab", "Medical", "Surgical", "Unknown"))
-
-# plot # medical, surgical, rehab discharges in each month?
-test <- ddply(patUse, .(DischargeDateMonth, pattype), summarise, N=length(pattype))
-test$N[test$DischargeDateMonth >= "201209" & test$DischargeDateMonth <= "201308"] <- NA
-
-ggplot(test, aes(x=DischargeDateMonth, y=N, colour=pattype, group=pattype)) +
-  geom_line() +
-  labs(x="Month", y="Number of discharges",
-       title="Number of medical, surgical, rehab patient discharges by month") +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1),
-        legend.position="bottom", legend.title=element_blank()) +
-  geom_vline(aes(xintercept=33), colour="red") +
-  geom_vline(aes(xintercept=50), colour="blue") +
-  scale_y_continuous(limits = c(0,2400),
-                     breaks=seq(0,2400,200))
-ggsave("~/Dropbox/Research/VBM/results/num_discharges2.png", width=20, height=10, units="cm")
-
-# since unknown patients stop after 2014/07, drop these patients - they have MS-DRG = Rehab
-test2 <- subset(patUse, `NYU Reporting Department â€“ Most Recent_Desc`!="Rehabilitation Medicine" & `MS-DRG Type`!="MED" & `MS-DRG Type`!="SURG")
-table(test2$DischargeDateMonth, test2$`MS-DRG Type`) # all MS-DRG Type = rehab
-
+3) drop rehab & psych patients
+```{r}
 # exclude MS-DRG Type = rehab & reporting dept = "Rehab medicine"
 patUse <- subset(patUse, `NYU Reporting Department â€“ Most Recent_Desc`!="Rehabilitation Medicine" & `MS-DRG Type`!="REHAB")
 NROW(patUse)
@@ -211,37 +169,6 @@ NROW(patUse)
 # exclude psych patients
 patUse <- subset(patUse, patUse$`NYU Reporting Department â€“ Most Recent_Desc`!="Psychiatry")
 NROW(patUse)
-
-# re-plot # discharges by patient type across months
-test <- ddply(patUse, .(DischargeDateMonth, pattype), summarise, N=length(pattype))
-test$N[test$DischargeDateMonth >= "201209" & test$DischargeDateMonth <= "201308"] <- NA
-
-ggplot(test, aes(x=DischargeDateMonth, y=N, colour=pattype, group=pattype)) +
-  geom_line() +
-  theme_bw(base_size=12) +
-  labs(x="Month", y="Number of discharges",
-       title="Number of medical, surgical patient discharges by month") +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1),
-        legend.position="bottom", legend.title=element_blank()) +
-  geom_vline(aes(xintercept=32), colour="red") +
-  scale_y_continuous(limits = c(0,2400),
-                     breaks=seq(0,2400,200))
-ggsave("~/Dropbox/Research/VBM/results/num_discharges3.png", width=20, height=10, units="cm")
-
-
-# these 4 places were for rehab patients
-# test <- subset(patUse, (`EPIC Discharge Dept_Desc` %in% c("HJD 8 SOUTH", "HJD 9 NORTH", "HJD 9 SOUTH", "TH HCC 9")))
-# table(test$DischargeDateMonth)
-# table(test$`Discharge Service_Desc`)
-
-# drop those 4 places
-# patUse <- subset(patUse, !(`EPIC Discharge Dept_Desc` %in% c("HJD 8 SOUTH", "HJD 9 NORTH", "HJD 9 SOUTH", "TH HCC 9")))
-table(patUse$`Discharge Service_Desc`)
-
-# drop any patients whose discharge service dept is Rehab medicine or Rehabilitation
-# patUse <- subset(patUse, !(`Discharge Service_Desc` %in% c("REHAB MEDICINE", "Rehabilitation")))
-
-table(patUse$DischargeDateMonth)
 ```
 
 Exclude newborns (MS-DRG = 795); these can impact calculations when volume fluctuates for newborns as the mother and newborns are both counted
@@ -256,20 +183,17 @@ Exclude Lutheran hospitals because they joined the hospital system later
 # exclude Lutheran
 patUse <- subset(patUse, str_sub(patUse$`EPIC Discharge Dept_Desc`,1,1) != "L" | is.na(patUse$`EPIC Discharge Dept_Desc`))
 NROW(patUse)
+```
 
-table(patUse$DischargeDateMonth)
-
-# focus on inpatient cases in Tisch 
+focus on inpatient cases in Tisch 
+```{r}
 table(patUse$`Custom Patient Type`)
-table(patUse$DischargeDateMonth, patUse$`Custom Patient Type`)
-# HI patients : ~500 patients per month
 patUse <- subset(patUse, !is.na(`Custom Patient Type`) & `Custom Patient Type` %in% c("TI"))
-#  "RI"
 NROW(patUse)
 ```
 
 
-Exclude LOS = 1 day and reporting department = Medicine - Don't apply this rule any more
+Exclude LOS = 1 day and reporting department = Medicine - SKIP: Don't apply this rule any more
 ```{r}
 sum(is.na(patUse$`NYU Reporting Department â€“ Most Recent_Desc`))
 table(patUse$`NYU Reporting Department â€“ Most Recent_Desc`) # "Medicine"
@@ -354,8 +278,10 @@ for (col in costs) {
   new.col <- paste(col, '_cpi', sep='')
   patUse[, new.col] <- patUse[, col] * 401.605/patUse$cpi
 }
+```
 
-# check that inflation adjustment was done well
+check that inflation adjustment was done well
+```{r}
 monthly_cost <- ddply(patUse, .(DischargeDateMonth), summarise, tvdcm=mean(tvdc, na.rm=TRUE), tvdc_cpim=mean(tvdc_cpi, na.rm=TRUE))
 
 # create monthly time-series data
@@ -650,13 +576,13 @@ patUse$oelos_gt15 <- ifelse(patUse$oelos > 1.5, 1, 0)
 create readmission outcome
 ```{r}
 patUse$readmit <- ifelse(patUse$`NYU Vizient Readmit Flag`=="Y" & !is.na(patUse$`NYU Vizient Readmit Flag`), 1, 0)
-summary(patUse$readmit) # 6.3% readmission
+summary(patUse$readmit) 
 ```
 
 create mortality outcome
 ```{r}
 patUse$death <- ifelse(patUse$`Discharge Disposition_Desc`=="Expired" | patUse$`Discharge Disposition_Desc`=="EXPIRED", 1, 0)
-summary(patUse$death) # 0.67% mortality rate
+summary(patUse$death) 
 
 # combine death + hospice
 table(patUse$`Discharge Disposition_Desc`)
@@ -678,20 +604,9 @@ colnames(patUse2)[which(colnames(patUse2)=="Length of Stay")] <- "los"
 patUse2 <- patUse2[patUse2$los > 0 ,]
 ```
 
-drop where surgical is missing
+drop where surgical indicator, insurance, mortality indicator, discharge date month are missing
 ```{r}
-patUse2 <- patUse2[!is.na(patUse2$surgical),]
-```
-
-drop where insurance is missing
-```{r}
-patUse2 <- patUse2[!is.na(patUse2$ins),]
-```
-
-drop where mortality indicator is missing
-```{r}
-patUse2 <- patUse2[!is.na(patUse2$death),]
-patUse2 <- patUse2[!is.na(patUse2$death_hospice),]
+patUse2 <- patUse2[complete.cases(patUse2[, c("surgical", "ins", "death", "death_hospice","DischargeDateMonth")]),]
 ```
 
 Quick summary stats to check for abnormal values (e.g. negative cost values)
@@ -721,8 +636,7 @@ for(i in 1:length(outcome)){
 
 exclude TVDC < $100; cost values can't be too small
 ```{r}
-table(patUse2$tvdc)
-
+summary(patUse2$tvdc)
 patUse2 <- patUse2[patUse2$tvdc >100, ]
 summary(patUse2$tvdc)
 ```
@@ -730,57 +644,13 @@ summary(patUse2$tvdc)
 
 exclude outlier costs = top 0.05%
 ```{r}
-# create z-score of the log cost
-# patUse2$logtvdc_cpi <- log(patUse2$tvdc_cpi)
-# patUse2$logtvdc_z <- scale(patUse2$logtvdc_cpi, center = TRUE, scale = TRUE)
-# summary(patUse2$logtvdc_z)
-
 quantile(patUse2$tvdc_cpi, 0.9995)
 quantile(patUse2$tvdc_cpi, 0.9995) / median(patUse2$tvdc_cpi) # bigger than median by a factor of 41
 
 patUse2$big <- patUse2$tvdc_cpi > quantile(patUse2$tvdc_cpi, 0.9995)
-
-n <- sum(patUse2$big)
-
-test <- subset(patUse2, (DischargeDateMonth < "201209" | DischargeDateMonth > "201308") & !(DischargeDateMonth>="201404" & DischargeDateMonth<="201408"))
-
-# scatterplot of CMI vs TVDC
-library(ggplot2)
-library(dplyr)
-ggplot(test, aes(x=CMI, y=tvdc_cpi, colour=factor(big, labels=c("Not outlier","Cost outlier")))) +
-  geom_point() +
-  theme(legend.position="bottom", legend.title=element_blank()) +
-  labs(y="CPI-adjusted total variable direct cost ($)",
-       caption=paste0("I exclude the ", n," outlier observations."))
-ggsave("~/Dropbox/Research/VBM/results/CMI_vs_cost.png")
-
-ggplot(test[test$big==0,], aes(x=CMI, y=tvdc_cpi)) +
-  geom_point() +
-  # geom_smooth() +
-  theme(legend.position="bottom", legend.title=element_blank()) +
-  labs(y="CPI-adjusted total variable direct cost ($)",
-       caption=paste0("I exclude the ", n," outlier observations."))
-ggsave("~/Dropbox/Research/VBM/results/CMI_vs_cost_nooutlier.png")
-
-ggplot(test[test$big==0,], aes(x=CMI, y=tvdc_cpi, colour=factor(int, labels=c("Pre", "Post")))) +
-  # facet_grid(.~factor(`Fiscal Year`)) +
-  geom_point() +
-  geom_smooth() +
-  theme(legend.position="bottom", legend.title=element_blank()) +
-  labs(y="Inflation-adjusted total variable direct cost ($)",
-       title=("Total variable direct cost vs CMI"))
-ggsave("~/Dropbox/Research/VBM/results/CMI_vs_cost_byint.png")
+sum(patUse2$big)
 
 patUse2 <- patUse2[patUse2$big==0,]
-```
-
-create categorical CMI group vars
-```{r}
-patUse2$cmiGroup <- cut(patUse2$CMI, breaks=c(quantile(patUse2$CMI, probs = seq(0, 1, by = 0.25))),
-      labels=c("0-25","25-50","50-75","75-100"), include.lowest=TRUE)
-quantile(patUse2$CMI, probs = seq(0, 1, by = 0.25))
- #     0%     25%     50%     75%    100%
- # 0.1649  0.7569  1.2494  2.0953 26.2466
 ```
 
 create CMI deciles 
@@ -793,46 +663,39 @@ table(patUse2$cmiD)
 merge in elixhauser dummies
 ```{r}
 # export the patient data to get elixhauser variables
-v <- c("PATIENT ID", "Enc - Primary ICD10 Diagnosis", "Enc - Primary ICD10 Surgical Procedure", "Enc - Primary ICD9 Diagnosis", "Enc - Primary ICD9 Surgical Procedure", "Discharge Date")
-pat_elix_03162018 <- patUse2[v]
-write.csv(pat_elix_03162018, file="~/Box Sync/VBM/Data/pat_elix_03162018.csv")
+colnames(patUse2)[which(colnames(patUse2)=="PATIENT ID")] <- "patid"
+colnames(patUse2)[which(colnames(patUse2)=="Enc - Primary ICD10 Diagnosis")] <- "icd10"
+colnames(patUse2)[which(colnames(patUse2)=="Enc - Primary ICD9 Diagnosis")] <- "icd9"
+colnames(patUse2)[which(colnames(patUse2)=="Discharge Date")] <- "dischargedate"
+colnames(patUse2)[which(colnames(patUse2)=="MS-DRG")] <- "DRG"
 
-# run crelixhauser.do on server in Stata
+# export to CSV file to run SAS code
+# v <- c("patid", "icd10", "icd9", "dischargedate", "DRG")
+# pat_elix_03162018 <- patUse2[v]
+# write.csv(pat_elix_03162018, file="~/Box Sync/VBM/Data/pat_elix_03162018.csv", row.names = FALSE)
 
-elix <- read.csv("~/Box Sync/VBM/Data/elixhauser.csv", header=TRUE)
+# run SAS codes to create elixhauser comorbidities
+# elix <- read.csv("~/Box Sync/VBM/Data/elixhauser.csv", header=TRUE)
+
+elix_sas1 <- read.csv("~/Box Sync/VBM/Data/pat_elix_03162018_pre201510.csv", header=TRUE) 
+elix_sas2 <- read.csv("~/Box Sync/VBM/Data/pat_elix_03162018_post201510.csv", header=TRUE) 
+
+# rename variables 
+for (i in 2:30) {
+  j <- i - 1
+  new <- paste0("dx",j)
+  colnames(elix_sas1)[i] <- new
+  colnames(elix_sas2)[i] <- new
+}
+elix_sas <- rbind(elix_sas1,elix_sas2)
+NROW(elix_sas)
 
 # merge with discharge-level data
 NROW(patUse2)
-patUse2 <- merge(patUse2, elix, by.x="PATIENT ID", by.y="PATIENT_ID", all.x=TRUE)
+patUse2 <- merge(patUse2, elix_sas, by="patid", all.x=TRUE)
 ```
 
-drop if discharge date month is missing
-```{r}
-patUse2 <- patUse2[complete.cases(patUse2[, c("DischargeDateMonth")]),]
-```
-
-save as project
-```{r}
-save(pat, pat2, pat3, patUse, patUse2, dateLookUp, file="~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014.RData")
-
-write.csv(patUse2, "~/Box Sync/VBM/Data/patUse2.csv", col.names=TRUE)
-```
-
-
-
-## Discharge-level analysis
-```{r}
-load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014.RData")
-
-```
-
-### Sub-category costs are variable costs only? 
-```{r}
-str(patUse2)
-```
-
-
-### Define some useful variables
+### Define DRG-weight adjusted costs
 ```{r}
 costs <- c("tvdc", "Pharmacy", "Laboratory", "Radiology",  "MRI", "ICU_postop", "implants_supplies","Blood", "OR", "inhalation","POT", "routine")
 
@@ -856,9 +719,49 @@ for (col in costs_cpi) {
 ```
 
 
+save as project
+```{r}
+patUse3 <- subset(patUse2, DischargeDateMonth < "201209" | DischargeDateMonth > "201308")
+
+save(pat, pat2, pat3, patUse, patUse2, patUse3, dateLookUp, elix_sas, file="~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014.RData")
+```
+
+save the discharge level data as CSV file for aggregate analysis
+```{r}
+v <- c("patid","DischargeDateMonth","tvdc_cpi", "dx1","dx2", "dx3", "dx4", "dx5", "dx6", "dx7", "dx8", "dx9", "dx10", "dx11", "dx12", "dx13", "dx14", "dx15", "dx16", "dx17", "dx18", "dx19", "dx20", "dx21", "dx22", "dx23", "dx24", "dx25", "dx26", "dx27", "dx28", "dx29", "cmiD", "surgical", "female", "AgeGroup", "raceGroup", "ins", "t", "int", "tpostInt", "season")
+test <- patUse3[v]
+write.csv(test, file="~/Box Sync/VBM/Data/patUse3.csv", row.names = FALSE, col.names=TRUE)
+```
+
+
+
+## Discharge-level analysis
+```{r}
+# load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014.RData")
+load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014 (Lucy.Kim@nyumc.org 2).RData")
+```
+
+### Sub-category costs are variable costs only? 
+```{r}
+str(patUse2)
+```
+
+
+
 ### Descriptive stats of outcomes
 ```{r}
 patUse3 <- subset(patUse2, DischargeDateMonth < "201209" | DischargeDateMonth > "201308")
+
+# covariates
+covar <- c("female", "AgeGroup", "raceGroup", "CMI","NYU Reporting Department â€“ Most Recent_Desc","ins")
+covar_lab <- c("Female", "ageGroup", "Race/ethnicity", "DRG weight", "Service line", "Payer")
+summary(patUse3[covar])
+
+table(patUse3$female, patUse3$int)
+table(patUse3$AgeGroup, patUse3$int)
+table(patUse3$raceGroup, patUse3$int)
+table(patUse3$`NYU Reporting Department â€“ Most Recent_Desc`, patUse3$int)
+table(patUse3$ins, patUse3$int)
 
 costs <- c("tvdc", "Pharmacy", "Laboratory", "Radiology",  "MRI", "ICU_postop", "implants_supplies","Blood", "OR", "inhalation","POT", "routine")
 costs_cpi_cmi <- paste(costs, "_cpi_cmi", sep="")
@@ -930,21 +833,6 @@ stargazer(as.data.frame(test), type = "html",
 test <- ddply(patUse2, .(DischargeDateMonth, pattype), summarise, N=length(pattype))
 test$N[test$DischargeDateMonth >= "201209" & test$DischargeDateMonth <= "201308"] <- NA
 
-# scatterplot
-ggplot(test, aes(x=DischargeDateMonth, y=N, colour=pattype, group=pattype)) +
-  theme_bw(base_size=15) +
-  geom_line() +
-  geom_point() +
-  labs(x="Month", y="Number of discharges",
-       title="Number of medical, surgical patient discharges by month") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.position="bottom", legend.title=element_blank()) +
-  geom_vline(aes(xintercept=32), colour="red") +
-  # geom_vline(aes(xintercept=36), colour="red") +
-  scale_y_continuous(limits = c(0,2000),
-                     breaks=seq(0,2000,200)) +
-  scale_x_discrete(breaks=c("201109","201201","201205","201209","201301","201305","201309","201401","201405","201409","201501","201505","201509","201601","201605","201609","201701","201705","201709"))
-
 # bar chart
 ggplot(test) +
   theme_bw(base_size=13) +
@@ -963,17 +851,22 @@ ggsave("~/Dropbox/Research/VBM/results/num_discharges_bymedsurg.png", width=20, 
 
 ### plot the mean cost & CMI trajectory 
 
-All patients
+All patients ------ COME BACK
 ```{r}
 costs <- c("tvdc")
 costs_lab <- c("Total variable direct")
 costs_cpi <- paste(costs, "_cpi", sep="")
 costs_cpi_cmi <- paste(costs_cpi, "_cmi", sep="")
 
-keep <- c(costs, costs_cpi, costs_cpi_cmi, "DischargeDateMonth", "CMI")
+# compute growth rate 
+ddply(patUse2[patUse2$DischargeDateMonth < "201209" | patUse2$DischargeDateMonth > "201308",], .(int), summarise, m=mean(tvdc_cpi_cmi, na.rm=TRUE))
+# mean cost in pre =5262.270
+patUse2$gr <- 100*(patUse2$tvdc_cpi_cmi - 5262.270)/5262.270
+ 
+keep <- c(costs, costs_cpi, costs_cpi_cmi, "gr", "DischargeDateMonth", "CMI")
 test3 <- ddply(patUse2[keep], .(DischargeDateMonth), numcolwise(mean, na.rm=TRUE))
 
-for (col in c(costs, costs_cpi, costs_cpi_cmi, "CMI")) {
+for (col in c(costs, costs_cpi, costs_cpi_cmi,"gr", "CMI")) {
   test3[test3$DischargeDateMonth >= "201209" & test3$DischargeDateMonth <= "201308", col] <- NA
 }
 
@@ -982,11 +875,11 @@ for (col in c(costs, costs_cpi, costs_cpi_cmi, "CMI")) {
 
 # line graphs: build up and show raw, just inflation adjusted, and CMI & inflation adjusted
 library(reshape2)
-test <- melt(test3[c("tvdc", "tvdc_cpi", "tvdc_cpi_cmi", "DischargeDateMonth")], id.var="DischargeDateMonth")
-test$variable <- factor(test$variable, labels = c("Raw", "Inflation-adjusted", "Inflation and DRG weight-adjusted"))
+test <- melt(test3[c("gr","tvdc", "tvdc_cpi", "tvdc_cpi_cmi", "DischargeDateMonth")], id.var="DischargeDateMonth")
+test$variable <- factor(test$variable, labels = c("Growth","Raw", "Inflation-adjusted", "Inflation and DRG weight-adjusted"))
 
 # all 3 costs together
-ggplot(test, aes(x=DischargeDateMonth, y=value, colour=variable, group=variable)) +
+ggplot(test[tset$variable!="Growth",], aes(x=DischargeDateMonth, y=value, colour=variable, group=variable)) +
   theme_bw(base_size=13) +
   geom_line() +
   geom_point() +
@@ -1010,7 +903,7 @@ ggplot(test[test$variable=="Inflation and DRG weight-adjusted",], aes(x=Discharg
   geom_point() +
   theme_bw(base_size=13) +
   labs(x="Month", y="Mean cost per discharge ($)",
-       title="Mean Total Variable Direct Cost per Discharge by Month",
+       # title="Mean Total Variable Direct Cost per Discharge by Month",
        subtitle="All patients") +
        # caption="Notes. May 2014 - August 2014 is the transition period.") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
@@ -1020,7 +913,31 @@ ggplot(test[test$variable=="Inflation and DRG weight-adjusted",], aes(x=Discharg
                      breaks=seq(0,6100,1000)) +
     scale_x_discrete(breaks=c("201109","201201","201205","201209","201301","201305","201309","201401","201405","201409","201501","201505","201509","201601","201605","201609","201701","201705","201709"))
 ggsave("~/Dropbox/Research/VBM/results/tvdc_cpi_cmi_trajectory.pdf", width=20, height=10, units="cm")
+
+
+# % change in costs 
+test2 <- subset(test, variable=="Growth")
+test2$int <- ifelse(test2$DischargeDateMonth >= "201405",1,0)
+ 
+ggplot(test2, aes(x=DischargeDateMonth, y=value, group=variable)) +
+  geom_line() +
+  geom_point() +
+  theme_bw(base_size=13) +
+  labs(x="Month", y="Percentage change (%)") +
+       # title="Mean Total Variable Direct Cost per Discharge by Month",
+       # subtitle="All patients") +
+       # caption="Notes. May 2014 - August 2014 is the transition period.") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position="bottom", legend.title=element_blank()) +
+  geom_vline(aes(xintercept=32), colour="black", linetype='dashed') +
+  scale_y_continuous(limits = c(-20,20),
+                     breaks=seq(-20,20,10)) +
+    scale_x_discrete(breaks=c("201109","201201","201205","201209","201301","201305","201309","201401","201405","201409","201501","201505","201509","201601","201605","201609","201701","201705","201709"))
+ggsave("~/Dropbox/Research/VBM/results/tvdc_cpi_cmi_gr_trajectory.tiff", width=20, height=10, units="cm")
+
 ```
+
+
 
 aggregate mean CMI by month
 ```{r}
@@ -1042,7 +959,13 @@ ggsave("~/Dropbox/Research/VBM/results/CMI_trajectory.pdf", width=20, height=10,
 
 plot separately by patient type
 ```{r}
-keep <- c(costs, costs_cpi, costs_cpi_cmi, "DischargeDateMonth", "CMI", "pattype")
+# compute growth rate 
+ddply(patUse2[patUse2$DischargeDateMonth < "201209" | patUse2$DischargeDateMonth > "201308",], .(int,surgical), summarise, m=mean(tvdc_cpi_cmi, na.rm=TRUE))
+# medical: mean cost in pre =5125.333
+# surgical: mean cost in pre =5481.823
+patUse2$gr <- ifelse(patUse2$pattype=="Surgical", 100*(patUse2$tvdc_cpi_cmi - 5481.823)/5481.823, 100*(patUse2$tvdc_cpi_cmi - 5125.333)/5125.333)
+
+keep <- c(costs, costs_cpi, costs_cpi_cmi, "gr", "DischargeDateMonth", "CMI", "pattype")
 test3 <- ddply(patUse2[keep], .(DischargeDateMonth, pattype), numcolwise(mean, na.rm=TRUE))
 
 for (col in c(costs, costs_cpi, costs_cpi_cmi, "CMI")) {
@@ -1052,8 +975,8 @@ for (col in c(costs, costs_cpi, costs_cpi_cmi, "CMI")) {
 # line graphs: build up and show raw, just inflation adjusted, and CMI & inflation adjusted
 library(reshape2)
 test3 <- data.table(test3)
-test <- melt(test3, id.vars=c("DischargeDateMonth","pattype"), measure.vars=c("tvdc", "tvdc_cpi", "tvdc_cpi_cmi"))
-test$variable <- factor(test$variable, labels = c("Raw", "Inflation-adjusted", "Inflation and DRG weight-adjusted"))
+test <- melt(test3, id.vars=c("DischargeDateMonth","pattype"), measure.vars=c("gr","tvdc", "tvdc_cpi", "tvdc_cpi_cmi"))
+test$variable <- factor(test$variable, labels = c("Growth","Raw", "Inflation-adjusted", "Inflation and DRG weight-adjusted"))
 
 ggplot(test[test$variable=="Inflation and DRG weight-adjusted",], aes(x=DischargeDateMonth, y=value, group=pattype, colour=pattype)) +
   geom_line() +
@@ -1070,6 +993,30 @@ ggplot(test[test$variable=="Inflation and DRG weight-adjusted",], aes(x=Discharg
                      breaks=seq(0,6100,1000)) +
     scale_x_discrete(breaks=c("201109","201201","201205","201209","201301","201305","201309","201401","201405","201409","201501","201505","201509","201601","201605","201609","201701","201705","201709"))
 ggsave("~/Dropbox/Research/VBM/results/trajectory_tvdc_cpi_cmi_pattype.pdf", width=20, height=10, units="cm")
+
+
+# % change in costs 
+test2 <- subset(test, variable=="Growth")
+test2$int <- ifelse(test2$DischargeDateMonth >= "201405",1,0)
+test2$value[test2$DischargeDateMonth >= "201209" & test2$DischargeDateMonth <= "201308"] <- NA
+
+
+ggplot(test2, aes(x=DischargeDateMonth, y=value, group=pattype, linetype=pattype)) +
+  geom_line() +
+  geom_point() +
+  theme_bw(base_size=13) +
+  labs(x="Month", y="Percentage change (%)") +
+       # title="Mean Total Variable Direct Cost per Discharge by Month",
+       # caption="Notes. May 2014 - August 2014 is the transition period.") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position="bottom", legend.title=element_blank()) +
+  geom_vline(aes(xintercept=32), colour="black", linetype='dashed') +
+  scale_y_continuous(limits = c(-20,20),
+                     breaks=seq(-20,20,10)) +
+    scale_x_discrete(breaks=c("201109","201201","201205","201209","201301","201305","201309","201401","201405","201409","201501","201505","201509","201601","201605","201609","201701","201705","201709"))
+ggsave("~/Dropbox/Research/VBM/results/trajectory_tvdc_cpi_cmi_growth_pattype.tiff", width=20, height=10, units="cm")
+
+
 ```
 
 aggregate mean CMI by month
@@ -1092,22 +1039,26 @@ ggsave("~/Dropbox/Research/VBM/results/CMI_trajectory_bypattype.pdf", width=20, 
 
 ### plot the CMI trajectory
 
-
-### Elixhauser comorbidity
-
 Elixhauser comorbidity index trajectory
 ```{r}
 patUse3 <- patUse2
 
 # all patients
-keep <- c("CMI", "elixsum", "tvdc_cpi", "DischargeDateMonth", "int")
+patUse3$dxsum <- 0
+for (i in 1:29) {
+  x <- paste0("dx",i)
+  patUse3$dxsum <- patUse3$dxsum + patUse3[,x]   
+}
+summary(patUse3$dxsum)
+
+keep <- c("CMI", "dxsum", "tvdc_cpi", "DischargeDateMonth", "int")
 test3 <- ddply(patUse3[keep], .(DischargeDateMonth), numcolwise(mean, na.rm=TRUE))
 
-for (col in c("CMI", "elixsum", "tvdc_cpi")) {
+for (col in c("CMI", "dxsum", "tvdc_cpi")) {
   test3[test3$DischargeDateMonth >= "201209" & test3$DischargeDateMonth <= "201308", col] <- NA
 }
 
-ggplot(test3, aes(x=DischargeDateMonth, y=elixsum, group=1)) +
+ggplot(test3, aes(x=DischargeDateMonth, y=dxsum, group=1)) +
   geom_line() +
   geom_point() +
   theme_bw(base_size=13) +
@@ -1119,17 +1070,17 @@ ggplot(test3, aes(x=DischargeDateMonth, y=elixsum, group=1)) +
   geom_vline(aes(xintercept=32), colour="red") +
   ylim(0,0.5) +
   scale_x_discrete(breaks=c("201109","201201","201205","201209","201301","201305","201309","201401","201405","201409","201501","201505","201509","201601","201605","201609","201701","201705","201709"))
-ggsave("~/Dropbox/Research/VBM/results/elixsum_trajectory.pdf", width=20, height=10, units="cm")
+ggsave("~/Dropbox/Research/VBM/results/dxsum_trajectory.pdf", width=20, height=10, units="cm")
 
 # by patient type
-keep <- c("CMI", "elixsum", "tvdc_cpi", "DischargeDateMonth", "pattype")
+keep <- c("CMI", "dxsum", "tvdc_cpi", "DischargeDateMonth", "pattype")
 test3 <- ddply(patUse3[keep], .(DischargeDateMonth, pattype), numcolwise(mean, na.rm=TRUE))
 
-for (col in c("CMI", "elixsum", "tvdc_cpi")) {
+for (col in c("CMI", "dxsum", "tvdc_cpi")) {
   test3[test3$DischargeDateMonth >= "201209" & test3$DischargeDateMonth <= "201308", col] <- NA
 }
 
-ggplot(test3, aes(x=DischargeDateMonth, y=elixsum, group=pattype, colour=pattype)) +
+ggplot(test3, aes(x=DischargeDateMonth, y=dxsum, group=pattype, colour=pattype)) +
   geom_line() +
   geom_point() +
   theme_bw(base_size=13) +
@@ -1142,91 +1093,19 @@ ggplot(test3, aes(x=DischargeDateMonth, y=elixsum, group=pattype, colour=pattype
   ylim(0,0.5) +
   scale_x_discrete(breaks=c("201109","201201","201205","201209","201301","201305","201309","201401","201405","201409","201501","201505","201509","201601","201605","201609","201701","201705","201709"))
 
-ggsave("~/Dropbox/Research/VBM/results/elixsum_trajectory_bypattype.pdf", width=20, height=10, units="cm")
+ggsave("~/Dropbox/Research/VBM/results/dxsum_trajectory_bypattype.pdf", width=20, height=10, units="cm")
 
 ```
-
-Elixhauser comorbidity index vs CMI - skip
-```{r}
-patUse3 <- subset(patUse2, DischargeDateMonth < "201209" | DischargeDateMonth > "201308")
-
-ggplot(patUse3, aes(x=factor(elixsum), y=CMI)) +
-  # facet_grid(.~factor(`Fiscal Year`)) +
-  geom_boxplot() +
-  geom_smooth() +
-  theme(legend.position="bottom", legend.title=element_blank()) +
-  labs(y="DRG weights",
-       x="Elixhauser comorbidity index",
-       title=("DRG weights vs Elixhauser comorbidity index"))
-ggsave("~/Dropbox/Research/VBM/results/CMI_vs_elixhauser.png")
-```
-
-
-### CMI vs Cost - skip
-```{r}
-patUse3 <- subset(patUse2, (DischargeDateD < "2012-09-01" | DischargeDateD > "2013-08-31") )
-
-ggplot(patUse3, aes(x=CMI, y=tvdc_cpi, colour=factor(int, labels=c("Pre", "Post")))) +
-  # facet_grid(.~factor(`Fiscal Year`)) +
-  geom_point() +
-  geom_smooth() +
-  theme(legend.position="bottom", legend.title=element_blank()) +
-  labs(y="Inflation-adjusted total variable direct cost ($)",
-       title=("Total variable direct cost vs CMI"))
-ggsave("~/Dropbox/Research/VBM/results/CMI_vs_cost_byint.png")
-
-ggplot(patUse3, aes(x=cmiGroup, y=tvdc_cpi)) +
-  # facet_grid(.~factor(`Fiscal Year`)) +
-  geom_boxplot() +
-  theme(legend.position="bottom", legend.title=element_blank()) +
-  labs(y="Inflation-adjusted total variable direct cost ($)",
-       title=("Total variable direct cost vs CMI quartiles"))
-ggsave("~/Dropbox/Research/VBM/results/CMI_vs_cost_byCMIq.png")
-
-patUse3$CMI2 <- (patUse3$CMI)^2
-
-ggplot(patUse3, aes(x=CMI2, y=tvdc_cpi, colour=factor(int, labels=c("Pre", "Post")))) +
-  # facet_grid(.~factor(`Fiscal Year`)) +
-  geom_point() +
-  geom_smooth() +
-  theme(legend.position="bottom", legend.title=element_blank()) +
-  labs(y="Inflation-adjusted total variable direct cost ($)",
-       title=("Total variable direct cost vs CMI squared"))
-ggsave("~/Dropbox/Research/VBM/results/CMIsq_vs_cost_byint.png")
-
-patUse3$tvdc_cpi_cmi <- patUse3$tvdc_cpi / patUse3$CMI
-summary(patUse3$tvdc_cpi_cmi)
-summary(patUse3$cmiGroup)
-
-ggplot(patUse3 ) +
-  geom_density(aes(tvdc_cpi), colour="red") +
-  geom_density(aes(tvdc_cpi_cmi), colour="blue")
-
-ggplot(patUse3, aes(tvdc_cpi_cmi)) +
-  geom_density()
-
-```
-
-
-
 
 
 ### Regression analysis
 
 just before running regressions, suppress to NA the discharge dates 9/2012 - 8/2013
 ```{r}
-load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014.RData")
-
-# patUse3 <- subset(patUse2, DischargeDateMonth < "201209" | DischargeDateMonth > "201308")
-
-# using Sept 2014 as the first post month
-patUse3 <- subset(patUse2, DischargeDateMonth < "201209" |(DischargeDateMonth > "201308" & DischargeDateMonth < "201405") | DischargeDateMonth >= "201409")
-patUse3$int[patUse3$DischargeDateMonth < "201409"] <- 0
-patUse3$tpostInt[patUse3$DischargeDateMonth < "201409"] <- 0
-patUse3$tpostInt[patUse3$DischargeDateMonth >= "201409"] <- patUse3$tpostInt[patUse3$DischargeDateMonth >= "201409"] -4
+load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014 (Lucy.Kim@nyumc.org 2).RData")
 
 test <- ddply(patUse3, .(DischargeDateMonth), summarise, int = mean(int), tpostInt = mean(tpostInt), t = mean(t))
-
+View(test)
 ```
 
 #### Main outcome: Total variable direct cost
@@ -1238,9 +1117,9 @@ test <- ddply(patUse3, .(DischargeDateMonth), summarise, int = mean(int), tpostI
 comb <- c("t + int + tpostInt + season",
           "t + int + tpostInt + season + cmiD",
           "t + int + tpostInt + season + cmiD  + surgical",
-          "t + int + tpostInt + season + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31",
-          "t + int + tpostInt + season + cmiD  + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup",
-          "t + int + tpostInt + season  + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup + ins")
+          "t + int + tpostInt + season + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29",
+          "t + int + tpostInt + season + cmiD  + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup",
+          "t + int + tpostInt + season  + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup + ins")
 
 costs_cpi <- ("tvdc_cpi")
 costs_lab <- ("Inflation-adjusted total variable direct costs (%)")
@@ -1298,9 +1177,10 @@ medical & surgical patients separately
 
 comb <- c("t + int + tpostInt + season",
           "t + int + tpostInt + season + cmiD",
-          "t + int + tpostInt + season + cmiD + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31",
-          "t + int + tpostInt + season + cmiD  + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup",
-          "t + int + tpostInt + season  + cmiD + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup + ins")
+          "t + int + tpostInt + season + cmiD + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29",
+          "t + int + tpostInt + season + cmiD  + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup",
+          "t + int + tpostInt + season  + cmiD + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup + ins")
+
 
 # medical patients
 patUse4 <- subset(patUse3, surgical=="0")
@@ -1350,13 +1230,6 @@ for (col in costs_cpi) {
 
 
 # surgical patients
-comb <- c("t + int + tpostInt + season",
-          "t + int + tpostInt + season + cmiD",
-          "t + int + tpostInt + season + cmiD + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31",
-          "t + int + tpostInt + season + cmiD  + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup",
-          "t + int + tpostInt + season  + cmiD + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup + ins")
-
-
 patUse4 <- subset(patUse3, surgical=="1")
 
 # some variables have only 1 level
@@ -1490,24 +1363,15 @@ sink(con, append=TRUE, type="message")
 comb <- c("t + int + tpostInt + season",
           "t + int + tpostInt + season + cmiD",
           "t + int + tpostInt + season + cmiD  + surgical",
-          "t + int + tpostInt + season + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31",
-          "t + int + tpostInt + season + cmiD  + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup",
-          "t + int + tpostInt + season  + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup + ins")
+          "t + int + tpostInt + season + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29",
+          "t + int + tpostInt + season + cmiD  + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup",
+          "t + int + tpostInt + season  + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup + ins")
 
+# everything except pharma & implants
+costs <- c("Laboratory", "Radiology",  "MRI", "ICU_postop","Blood", "OR", "inhalation","POT", "routine")
+costs_lab <- c("Laboratory", "Radiology",  "MRI", "ICU/CCU and Post Op/Stepdown","Blood", "OR", "Inhalation therapy","Physical/Occupational therapy", "Routine care")
 
-costs <- c("POT", "routine")
-  # c("Laboratory", "Radiology",  "MRI", "ICU_postop", "OR", 
-costs_lab <- c( "Physical/Occupational therapy", "Routine care")
-  # c("Laboratory", "Radiology",  "MRI", "ICU/CCU and Post Op/Stepdown", "OR",
-               
 costs_cpi <- paste(costs, "_cpi", sep="")
-
-# costs_cpi_cmi <- paste(costs, "_cpi_cmi", sep="")
-# for (col in costs_cpi) {
-#   x <- paste0(col,"_cmi")
-#   print(x)
-#   patUse3[,x] <- patUse3[,col] / patUse3$CMI
-# }
 
 pct_chng <- function(x) 100*(exp(x)-1)
 
@@ -1582,9 +1446,9 @@ subcategory costs: "Blood"
 comb <- c("t + int + tpostInt + season",
           "t + int + tpostInt + season + cmiD",
           "t + int + tpostInt + season + cmiD  + surgical",
-          "t + int + tpostInt + season + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel30 + ynel31",
-          "t + int + tpostInt + season + cmiD  + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel30 + ynel31 + female + AgeGroup + raceGroup",
-          "t + int + tpostInt + season  + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel30 + ynel31 + female + AgeGroup + raceGroup + ins")
+          "t + int + tpostInt + season + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29",
+          "t + int + tpostInt + season + cmiD  + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup",
+          "t + int + tpostInt + season  + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup + ins")
 
 
 # some variables have only 1 level
@@ -1595,118 +1459,12 @@ for (i in 1:31) {
   print(summary(patUse4[,x]))
 }
 # ynel25 have only 0 one level (absent) (See https://stackoverflow.com/questions/18171246/error-in-contrasts-when-defining-a-linear-model-in-r)
-summary(patUse4$ynel29)
+summary(patUse4$dx29)
 
 
 costs <- c("Blood")
 costs_lab <- c("Blood")
 costs_cpi <- paste(costs, "_cpi", sep="")
-
-# costs_cpi_cmi <- paste(costs, "_cpi_cmi", sep="")
-# for (col in costs_cpi) {
-#   x <- paste0(col,"_cmi")
-#   print(x)
-#   patUse3[,x] <- patUse3[,col] / patUse3$CMI
-# }
-
-pct_chng <- function(x) 100*(exp(x)-1)
-
-init <- 0
-n <- length(comb)
-
-for (col in costs_cpi) {
-  init <- init + 1
-  depv <- c(costs_lab[init])
-
-  # Logit on Pr(cost > 0)
-  y <- paste0(col, "_pos")
-  models <- lapply(paste0( rep(y,n),"~", comb), formula)
-
-  # patUse3$CMIQ <- cut(patUse3$CMI, breaks=c(quantile(patUse3$CMI, probs = seq(0, 1, by = 0.25), na.rm=TRUE)),
-                      # labels=c("0-25","25-50","50-75","75-100"), include.lowest=TRUE)
-
-  logitresult <- lapply(models, FUN = function(x) {
-      glm(formula = x,
-              data = patUse3,
-              family=binomial(link="logit"),
-              na.action="na.omit")
-  })
-
-  # Gamma on costs using (+) costs data  
-  models <- lapply(paste0( rep(col,n),"~", comb), formula)
-
-  patUse4 <- patUse3[patUse3[,col] > 0, ]
-
-  # patUse4$CMIQ <- cut(patUse4$CMI, breaks=c(quantile(patUse4$CMI, probs = seq(0, 1, by = 0.25), na.rm=TRUE)),
-                         # labels=c("0-25","25-50","50-75","75-100"), include.lowest=TRUE)
-
-  result <- lapply(models, FUN = function(x) {
-    lmcoef <- coef(lm(formula = x, data=patUse4, na.action="na.omit"))
-    k <- length(lmcoef)
-
-    glm(formula = x,
-              data = patUse4,
-              family=Gamma(link="log"),
-              na.action="na.omit",
-              start=c(20, rep(0,k-1)))
-  })
-
-  stargazer(logitresult, type="html", report = "vcp*",
-            t.auto=F, p.auto=F,keep.stat=c("n","adj.rsq","ll","aic"),
-            apply.coef = pct_chng,
-            dep.var.labels = depv,
-            covariate.labels = c("Time","Intervention","Time After Intervention"),
-            out=paste("~/Dropbox/Research/VBM/results/", col, "_pos.htm", sep=""))
-            # out=paste("/Users/kunheekim/Dropbox/Research/VBM/results/", col, "2.htm", sep=""))
-            # out=paste("/home/hcmg/kunhee/VBM/", col, ".htm", sep=""))
-
-  stargazer(result, type="html", report = "vcp*",
-            t.auto=F, p.auto=F,keep.stat=c("n","adj.rsq","ll","aic"),
-            apply.coef = pct_chng,
-            dep.var.labels = depv,
-            covariate.labels = c("Time","Intervention","Time After Intervention"),
-            out=paste("~/Dropbox/Research/VBM/results/", col, ".htm", sep=""))
-            # out=paste("/Users/kunheekim/Dropbox/Research/VBM/results/", col, "2.htm", sep=""))
-            # out=paste("/home/hcmg/kunhee/VBM/", col, ".htm", sep=""))
-
-  for (i in 1:n) {
-    print(col)
-    print(summary(logitresult[[i]]))
-    print(summary(result[[i]]))
-  }
-}
-```
-
-subcategory costs: "inhalation"
-```{r}
-comb <- c("t + int + tpostInt + season",
-          "t + int + tpostInt + season + cmiD",
-          "t + int + tpostInt + season + cmiD  + surgical",
-          "t + int + tpostInt + season + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31",
-          "t + int + tpostInt + season + cmiD  + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup",
-          "t + int + tpostInt + season  + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup + ins")
-
-# some variables have only 1 level
-patUse4 <- subset(patUse3, inhalation_cpi > 0)
-for (i in 1:31) {
-  x <- paste0("ynel",i)
-  print(x)
-  print(summary(patUse4[,x]))
-}
-# ynel25 have only 0 one level (absent) (See https://stackoverflow.com/questions/18171246/error-in-contrasts-when-defining-a-linear-model-in-r)
-summary(patUse4$ynel25)
-
-
-costs <- c("inhalation")
-costs_lab <- c("Inhalation therapy")
-costs_cpi <- paste(costs, "_cpi", sep="")
-
-# costs_cpi_cmi <- paste(costs, "_cpi_cmi", sep="")
-# for (col in costs_cpi) {
-#   x <- paste0(col,"_cmi")
-#   print(x)
-#   patUse3[,x] <- patUse3[,col] / patUse3$CMI
-# }
 
 pct_chng <- function(x) 100*(exp(x)-1)
 
@@ -1783,17 +1541,21 @@ costs <- c("Pharmacy")
 costs_lab <- c("Pharmacy")
 costs_cpi <- paste(costs, "_cpi", sep="")
 
-# costs_cpi_cmi <- paste(costs, "_cpi_cmi", sep="")
-# for (col in costs_cpi) {
-#   x <- paste0(col,"_cmi")
-#   print(x)
-#   patUse3[,x] <- patUse3[,col] / patUse3$pharma_wgt
-# }
-
 patUse3$pharma_wgtD <- cut(patUse3$pharma_wgt, breaks=c(unique(quantile(patUse3$pharma_wgt, probs = seq(0, 1, by = 0.1), na.rm=TRUE))) ,labels=c("0-10","10-20","20-30","30-40","40-50","50-60","60-70","70-80","80-100"), include.lowest=TRUE)
 table(patUse3$pharma_wgtD)
 
 patUse4 <- subset(patUse3, !is.na(pharma_wgtD))
+summary(patUse4$pharma_wgtD)
+
+# some variables have only 1 level
+patUse4 <- subset(patUse3, !is.na(pharma_wgtD) & Pharmacy_cpi > 0)
+for (i in 1:29) {
+  x <- paste0("dx",i)
+  print(x)
+  print(summary(patUse4[,x]))
+}
+# ynel25 have only 0 one level (absent) (See https://stackoverflow.com/questions/18171246/error-in-contrasts-when-defining-a-linear-model-in-r)
+summary(patUse4$dx29)
 
 # ggplot(patUse4, aes(x=pharma_wgt, y=Pharmacy_cpi)) +
 #   geom_point()
@@ -1801,9 +1563,9 @@ patUse4 <- subset(patUse3, !is.na(pharma_wgtD))
 comb <- c("t + int + tpostInt + season",
           "t + int + tpostInt + season + pharma_wgtD",
           "t + int + tpostInt + season + pharma_wgtD  + surgical",
-          "t + int + tpostInt + season + pharma_wgtD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31",
-          "t + int + tpostInt + season + pharma_wgtD  + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup",
-          "t + int + tpostInt + season  + pharma_wgtD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup + ins")
+          "t + int + tpostInt + season + pharma_wgtD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29",
+          "t + int + tpostInt + season + pharma_wgtD  + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29  + female + AgeGroup + raceGroup",
+          "t + int + tpostInt + season  + pharma_wgtD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29  + female + AgeGroup + raceGroup + ins")
 
 pct_chng <- function(x) 100*(exp(x)-1)
 
@@ -1890,16 +1652,12 @@ patUse3$supply_wgtD <- cut(patUse3$supply_wgt, breaks=c(quantile(patUse3$supply_
   labels=c("0-10","10-20","20-30","30-40","40-50","50-60","60-70","70-80","80-90","90-100"), include.lowest=TRUE)
 table(patUse3$supply_wgtD)
 
-# patUse4 <- subset(patUse3, Pharmacy_cpi > 0 & !is.na(pharma_wgt))
-# ggplot(patUse4, aes(x=pharma_wgt, y=Pharmacy_cpi)) +
-#   geom_point()
-
 comb <- c("t + int + tpostInt + season",
           "t + int + tpostInt + season + supply_wgtD",
-          "t + int + tpostInt + season + supply_wgtD  + surgical",
-          "t + int + tpostInt + season + supply_wgtD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31",
-          "t + int + tpostInt + season + supply_wgtD  + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup",
-          "t + int + tpostInt + season  + supply_wgtD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup + ins")
+          "t + int + tpostInt + season + supply_wgtD + surgical",
+          "t + int + tpostInt + season + supply_wgtD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29",
+          "t + int + tpostInt + season + supply_wgtD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29  + female + AgeGroup + raceGroup",
+          "t + int + tpostInt + season + supply_wgtD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29  + female + AgeGroup + raceGroup + ins")
 
 pct_chng <- function(x) 100*(exp(x)-1)
 
@@ -2049,9 +1807,9 @@ quantile(patUse3$los, c(.99))
 comb <- c("t + int + tpostInt + season",
           "t + int + tpostInt + season + cmiD",
           "t + int + tpostInt + season + cmiD  + surgical",
-          "t + int + tpostInt + season + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31",
-          "t + int + tpostInt + season + cmiD  + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup",
-          "t + int + tpostInt + season  + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup + ins")
+          "t + int + tpostInt + season + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29",
+          "t + int + tpostInt + season + cmiD  + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup",
+          "t + int + tpostInt + season  + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup + ins")
 
 pct_chng <- function(x) 100*(exp(x)-1)
 
@@ -2112,9 +1870,9 @@ table(patUse3$DischargeDateMonth, patUse3$tpostInt)
 comb <- c("t + int + tpostInt + season",
           "t + int + tpostInt + season + cmiD",
           "t + int + tpostInt + season + cmiD  + surgical",
-          "t + int + tpostInt + season + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31",
-          "t + int + tpostInt + season + cmiD  + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup",
-          "t + int + tpostInt + season  + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup + ins")
+          "t + int + tpostInt + season + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29",
+          "t + int + tpostInt + season + cmiD  + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup",
+          "t + int + tpostInt + season  + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup + ins")
 
 
 pct_chng <- function(x) 100*(exp(x)-1)
@@ -2162,9 +1920,9 @@ los_y_lab <- c("Indicator for having O/E LOS ratio > 1.5")
 comb <- c("t + int + tpostInt + season",
           "t + int + tpostInt + season + cmiD",
           "t + int + tpostInt + season + cmiD  + surgical",
-          "t + int + tpostInt + season + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31",
-          "t + int + tpostInt + season + cmiD  + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup",
-          "t + int + tpostInt + season  + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup + ins")
+          "t + int + tpostInt + season + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29",
+          "t + int + tpostInt + season + cmiD  + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup",
+          "t + int + tpostInt + season  + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup + ins")
 
 pct_chng <- function(x) 100*(exp(x)-1)
 
@@ -2258,7 +2016,7 @@ table(patUse2$DischargeDateMonth, patUse2$death==1) # readmission=0 always befor
 # should use pre-period 2013/09 - 2014/04 only when outcome = O/E ratio
 patUse3 <- patUse2[patUse2$DischargeDateMonth >= "201201" ,]
 
-patUse3 <- subset(patUse3, DischargeDateD < "2012-09-01" | DischargeDateD > "2013-08-31" )
+patUse3 <- subset(patUse3, (DischargeDateD < "2012-09-01" | DischargeDateD > "2013-08-31") & DischargeDateMonth!="201712")
 
 table(patUse3$DischargeDateMonth)
 
@@ -2284,9 +2042,10 @@ table(patUse3$DischargeDateMonth, patUse3$t)
 comb <- c("t + int + tpostInt + season",
           "t + int + tpostInt + season + cmiD",
           "t + int + tpostInt + season + cmiD  + surgical",
-          "t + int + tpostInt + season + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31",
-          "t + int + tpostInt + season + cmiD  + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup",
-          "t + int + tpostInt + season  + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup + ins")
+          "t + int + tpostInt + season + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29",
+          "t + int + tpostInt + season + cmiD  + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup",
+          "t + int + tpostInt + season  + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup + ins")
+
 
 pct_chng <- function(x) 100*(exp(x)-1)
 
@@ -2334,12 +2093,14 @@ death
 health_y <- c("death")
 health_y_lab <- c("Indicator for in-hospital death")
 
+library(ResourceSelection) # to assess the goodness of fit
+
 comb <- c("t + int + tpostInt + season",
           "t + int + tpostInt + season + cmiD",
           "t + int + tpostInt + season + cmiD  + surgical",
-          "t + int + tpostInt + season + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31",
-          "t + int + tpostInt + season + cmiD  + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup",
-          "t + int + tpostInt + season  + cmiD + surgical + ynel1 + ynel2 + ynel3 + ynel4 + ynel5 + ynel6 + ynel7 + ynel8 + ynel9 + ynel10 + ynel11 + ynel12 + ynel13 + ynel14 + ynel15 + ynel16 + ynel17 + ynel18 + ynel19 + ynel20 + ynel21 + ynel22 + ynel23 + ynel24 + ynel25 + ynel26 + ynel27 + ynel28 + ynel29 + ynel30 + ynel31 + female + AgeGroup + raceGroup + ins")
+          "t + int + tpostInt + season + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29",
+          "t + int + tpostInt + season + cmiD  + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup",
+          "t + int + tpostInt + season  + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup + ins")
 
 patUse3 <- subset(patUse2, DischargeDateD < "2012-09-01" | DischargeDateD > "2013-08-31" )
 
@@ -2358,11 +2119,14 @@ for (col in health_y) {
     lmcoef <- coef(lm(formula = x, data=patUse3, na.action="na.omit"))
     k <- length(lmcoef)
 
-    glm(formula = x,
+    glmmodel <- glm(formula = x,
               data = patUse3,
               family=binomial(link="logit"),
               na.action="na.omit")
+    print(summary.glm(glmmodel))
+    # print(anova(glmmodel, test="Cp"))
   })
+
   # clust.bs.p <- cluster.bs.glm(result[[i]], patUse2, ~ site, report = T)
   # result2 <- result
   # for (i in 1:n) {
@@ -2379,8 +2143,24 @@ for (col in health_y) {
             dep.var.labels = depv,
             covariate.labels = c("Time","Intervention","Time After Intervention"),
             out=paste("~/Dropbox/Research/VBM/results/", col, ".htm", sep=""))
-            # out=paste("/home/hcmg/kunhee/VBM/", col, ".htm", sep=""))
 }
+
+#Hosmer and Lemeshow goodness of fit (GOF) test (https://www.theanalysisfactor.com/r-glm-model-fit/)
+
+glmmodel <- glm(formula = death ~ t + int + tpostInt + season  + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup + ins,
+              data = patUse3,
+              family=binomial(link="logit"),
+              na.action="na.omit")
+glmmodel_null <- glm(formula = death ~ 1,
+              data = patUse3,
+              family=binomial(link="logit"),
+              na.action="na.omit")
+summary(glmmodel_null)
+anova(glmmodel_null, glmmodel, test="Cp")
+anova(glmmodel_null, glmmodel, test="Chisq")
+with(anova(glmmodel_null,glmmodel),pchisq(Deviance,Df,lower.tail=FALSE)[2]) 
+
+hoslem.test(patUse3$death, fitted(glmmodel))
 ```
 
 ### stop sinking file (i.e. saving console output to log file)
@@ -2396,6 +2176,95 @@ library(qcc)
 patUse2$tvdc_cpi_cmi <- patUse2$tvdc_cpi / patUse2$CMI
 
 patUse3 <- subset(patUse2, (DischargeDateMonth < "201209" | DischargeDateMonth > "201308"))
+
+# normalize the cost by substracting the mean cost and dividing by the SD of the cost during the pre-period (2011/09 - 2012/04) 
+monthly_cost <- ddply(patUse3, .(int), summarise, tvdc_cpi_cmim=mean(tvdc_cpi_cmi, na.rm=TRUE), tvdc_cpi_cmisd=sd(tvdc_cpi_cmi, na.rm=TRUE))
+# mean cost in pre = 5262.270, SD cost in pre = 5038.084
+test <- merge(patUse3, monthly_cost, by="int")
+
+# plot % change for all patients
+test$tvdc_cpi_cmi_gr <-  100*(test$tvdc_cpi_cmi - 5262.270)/5262.270
+
+pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmi_gr.tiff")
+my.xmr.x <- qcc(data =  qcc.groups(test$tvdc_cpi_cmi_gr[test$int==0],
+                                   test$DischargeDateMonth[test$int==0]),
+                 newdata= qcc.groups(test$tvdc_cpi_cmi_gr[test$int==1],
+                                     test$DischargeDateMonth[test$int==1]),
+                title="",
+                type = "xbar",
+                ylim=c(-20,20),
+                ylab="Percentage change (%)",
+                xlab="Month",
+                axes.las = 1,
+                add.stats = F,
+                label.limits = c("",""),
+                confidence.level = .95
+                )
+dev.off()
+
+ddply(patUse3, .(int, surgical), summarise, tvdc_cpi_cmim=mean(tvdc_cpi_cmi, na.rm=TRUE), tvdc_cpi_cmisd=sd(tvdc_cpi_cmi, na.rm=TRUE))
+# medical: mean cost in pre =5125.333
+# surgical: mean cost in pre =5481.823
+
+# plot % change for medical patients
+test$tvdc_cpi_cmi_gr <- ifelse(test$pattype=="Surgical", 100*(test$tvdc_cpi_cmi - 5481.823)/5481.823, 100*(test$tvdc_cpi_cmi - 5125.333)/5125.333)
+
+# surgical
+pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmi_gr_surg.tiff")
+my.xmr.x <- qcc(data =  qcc.groups(test$tvdc_cpi_cmi_gr[test$int==0 & test$pattype=="Surgical"],
+                                   test$DischargeDateMonth[test$int==0 & test$pattype=="Surgical"]),
+                 newdata= qcc.groups(test$tvdc_cpi_cmi_gr[test$int==1 & test$pattype=="Surgical"],
+                                     test$DischargeDateMonth[test$int==1 & test$pattype=="Surgical"]),
+                title="",
+                type = "xbar",
+                ylim=c(-20,20),
+                ylab="Percentage change (%)",
+                xlab="Month",
+                axes.las = 1,
+                # add.stats = F,
+                label.limits = c("",""),
+                confidence.level = .95
+                )
+dev.off()
+
+# medical
+pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmi_gr_med.tiff")
+my.xmr.x <- qcc(data =  qcc.groups(test$tvdc_cpi_cmi_gr[test$int==0 & test$pattype=="Medical"],
+                                   test$DischargeDateMonth[test$int==0 & test$pattype=="Medical"]),
+                 newdata= qcc.groups(test$tvdc_cpi_cmi_gr[test$int==1 & test$pattype=="Medical"],
+                                     test$DischargeDateMonth[test$int==1 & test$pattype=="Medical"]),
+                title="",
+                type = "xbar",
+                ylim=c(-20,20),
+                ylab="Percentage change (%)",
+                xlab="Month",
+                axes.las = 1,
+                add.stats = F,
+                label.limits = c("",""),
+                confidence.level = .95
+                )
+dev.off()
+
+# plot normalized
+test$tvdc_cpi_cmiN = (test$tvdc_cpi_cmi - 5262.270)/5038.084
+
+pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmiN.pdf")
+my.xmr.x <- qcc(data =  qcc.groups(test$tvdc_cpi_cmiN[test$int==0],
+                                   test$t[test$int==0]),
+                 newdata= qcc.groups(test$tvdc_cpi_cmiN[test$int==1],
+                                     test$t[test$int==1]),
+                title="Statistical Process Control Model: \nMean Inflation and DRG Weight-Adjusted Total Direct Variable Cost per Discharge \nNormalized by Pre-VBM Mean and Standard Deviation",
+                type = "xbar",
+                ylim=c(-0.2,0.2),
+                ylab="Mean total direct variable cost per discharge",
+                xlab="Month index" 
+                # add.stats = F,
+                # nsigmas=3,
+                # label.limits=c("a","b"),
+                # std.dev=1
+                )
+# lines(rep(21,10), seq(0,15000,length.out=10), col="blue")
+dev.off()
 
 pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi.pdf")
 my.xmr.x <- qcc(data =  qcc.groups(patUse3$tvdc_cpi[patUse3$int==0],
@@ -2492,7 +2361,7 @@ for (col in costs_cpi) {
   pacf(aggData.ts[,col], na.action = na.pass )
   dev.off()
 }
-# PACF order= 1 for all pats; =3 for surg, =5 for med pats
+# PACF order= 1 for all pats; =2 for surg, =4 for med pats
 ```
 
 Define a function to estimate an ITS model
@@ -2687,7 +2556,7 @@ for (col in y) {
                      lastPreMonth = c(2014,4),
                      firstPostMonth = c(2014,5),
                      lastMonth=c(2017,12),
-                     arOrder=3,
+                     arOrder=2,
                      ylim=c(0,y_ul[init]),
                      ylab=paste0("Patient risk-adjusted total variable direct costs"," ($)"),
                      main=paste0("Interrupted Time Series Model", "\n", y_lab[init]),
@@ -2715,7 +2584,7 @@ for (col in y) {
                      lastPreMonth = c(2014,4),
                      firstPostMonth = c(2014,5),
                      lastMonth=c(2017,12),
-                     arOrder=5,
+                     arOrder=4,
                      ylim=c(0,y_ul[init]),
                      ylab=paste0("Patient risk-adjusted total variable direct costs"," ($)"),
                      main=paste0("Interrupted Time Series Model", "\n", y_lab[init]),
@@ -2911,7 +2780,7 @@ for (col in y) {
 ```
 
 
-LOS & Mortality outcomes
+LOS & Mortality outcomes - skip
 
 ```{r}
 y <- c("los", "death")
@@ -2955,7 +2824,7 @@ for (col in y) {
 }
 ```
 
-Readmission outcome
+Readmission outcome - skip
 ```{r}
 outcome <- ts(aggData.ts[17:81,c("readmit","death")], start=c(2012,1), end=c(2017,5), frequency = 12)
 
@@ -2997,7 +2866,7 @@ for (col in y) {
 }
 ```
 
-O/E outcome
+O/E outcome - skip
 ```{r}
 patUse3 <- patUse2[patUse2$DischargeDateMonth >= "201309" & patUse2$explos > 0,]
 

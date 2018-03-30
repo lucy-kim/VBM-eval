@@ -1,18 +1,11 @@
 * create Elixhauser comorbidity index using the ICD9 & ICD10 codes in the VBM patient discharge level data
 
 cd ~/VBM
-capture ssc install elixhauser
+ssc install elixhauser
 set seed 123
 
 loc f "pat_elix_03162018.csv"
 insheet using "`f'", clear names
-
-rename patientid PATIENT_ID
-rename encprimaryicd10diagnosis icd10
-rename encprimaryicd10surgicalprocedure icd10p
-rename encprimaryicd9diagnosis icd9
-rename encprimaryicd9surgicalprocedure icd9p
-drop v1
 
 gen icd9missing = icd9 =="0" | icd9=="NA"
 gen icd10missing = icd10=="NA"
@@ -27,12 +20,13 @@ drop dischargedate dischargedate?
 gen ym = ym(year(Discharge_Date), month(Discharge_Date))
 format ym %tm
 
+*for 2015/10 - later, ICD 10 used; for 2011/09 - 2015/09, ICD 9 used
 tab ym, summarize(icd9missing)
 * missing starting from 2015/10
 tab ym, summarize(icd10missing)
 * missing before 2015/10
 
-keep PATIENT_ID icd* ym
+keep patid icd* ym surgical
 drop *missing
 
 count
@@ -44,6 +38,10 @@ foreach v of varlist icd* {
 
 tempfile tmp
 save `tmp'
+
+*merge with ICD 10 to ICD 9 code xwalk
+use icd10cmtoicd9gem.dta, clear
+
 
 * ICD 9
 use `tmp', clear
@@ -60,7 +58,7 @@ foreach v of varlist icd9* {
 rename icd9 DX1
 rename icd9p DX2
 
-elixhauser DX1 DX2, index(e) idvar(PATIENT_ID) diagprfx("DX") smelix
+elixhauser DX1, index(e) idvar(patid) diagprfx("DX") smelix
 
 tempfile icd9
 save `icd9'
@@ -78,15 +76,16 @@ foreach v of varlist icd10 icd10p {
 rename icd10 DX1
 rename icd10p DX2
 
-elixhauser DX1 DX2, index(10) idvar(PATIENT_ID) diagprfx("DX") smelix
+elixhauser DX1, index(10) idvar(patid) diagprfx("DX") smelix
 
 tempfile icd10
 save `icd10'
 
+
 use `icd9', clear
 append using `icd10'
 
-duplicates tag PATIENT_ID, gen(dup)
+duplicates tag patid, gen(dup)
 assert dup==0
 drop dup
 
@@ -100,9 +99,35 @@ saveold elixhauser, replace
 outsheet using elixhauser.csv, comma names replace
 
 *-----------------------
+
+use elixhauser, clear
+merge 1:1 patid using `tmp', keepusing(ym surgical) nogen
+
+collapse (mean) ynel* elixsum, by(ym surgical)
+
+sort surgical ym
+list ym elixsum if surgical==1
+
+gen post201510 = ym >= ym(2015,10)
+
+preserve
+collapse (mean) ynel* elixsum, by(post surgical)
+keep if surg==1
+sort post
+
+foreach v of varlist ynel* {
+  gen d_`v' = 100*(`v' - `v'[_n-1])/`v'[_n-1]
+}
+list d_*
+
+
+preserve
+keep if surgical==1
+outsheet using elixtest_s.csv, replace comma names
+
 /* * merge with original data to see which patients got dropped
 use elixhauser, clear
-merge 1:1 PATIENT_ID using `tmp'
+merge 1:1 patid using `tmp'
 *693 obs have _m=2 -- all of these have icd9=="0" & icd9p=="0", i.e. missing, so it's fine to exclude them
 
 *why do rehab patients have mostly 0's in elixhauser dummies?
@@ -120,7 +145,7 @@ gen icd10missing = icd10==""
 gen ym = ym(year(Discharge_Date), month(Discharge_Date))
 format ym %tm
 
-keep PATIENT_ID icd* ym
+keep patid icd* ym
 
 tempfile tmp
 save `tmp'
@@ -142,10 +167,10 @@ foreach v of varlist icd9 icd9p {
 rename icd9 DX1
 rename icd9p DX2
 
-elixhauser DX1, index(e) idvar(PATIENT_ID) diagprfx("DX") smelix
+elixhauser DX1, index(e) idvar(patid) diagprfx("DX") smelix
 
 
 
 
 
-merge 1:1 PATIENT_ID using elixhauser, keep(1 3) */
+merge 1:1 patid using elixhauser, keep(1 3) */

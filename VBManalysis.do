@@ -4,17 +4,21 @@ cd ~/VBM
 capture ssc install estout
 set seed 39103
 
-/* insheet using patUse3.csv, comma nonames clear
+insheet using patUse3.csv, comma nonames clear
 
-*drop April 2014 - Aug 2014 (Transition period) & FY 2013 (hurricane)
+foreach var of varlist * {
+  capture replace `var' = trim(`var')
+  capture rename `var' `=strtoname(`var'[1])'
+}
+rename t Time
+rename v40 Intervention
 
-tostring v1, replace
-replace v1 = "0" in 1/1
+drop in 1/1
 
-*manually change long var names
+/* *manually change long var names
 foreach v of varlist * {
-  replace `v' = subinstr(`v', "Enc - ", "",.) in 1/1
-  *replace `v' = subinstr(`v', "NYU Finance - ", "",.) in 1/1
+replace `v' = subinstr(`v', "Enc - ", "",.) in 1/1
+*replace `v' = subinstr(`v', "NYU Finance - ", "",.) in 1/1
 }
 replace v27 = "NYU report dept Most Recent" in 1/1
 replace v28 = "NYU report dept Most Recent_Desc" in 1/1
@@ -29,43 +33,33 @@ replace v142 = "Intervention" in 1/1
 
 gen init = 0
 foreach var of varlist * {
-  replace init = init + 1
-  capture replace `var' = trim(`var')
-  capture rename `var' `=strtoname(`var'[1])'
+replace init = init + 1
+capture replace `var' = trim(`var')
+capture rename `var' `=strtoname(`var'[1])'
 }
 drop init
 drop in 1/1
 
 keep if big=="FALSE"
-drop big _0
+drop big _0 */
 
 * exclude FY 13
 gen yr = substr(DischargeDateMonth,1,4)
 gen mo = substr(DischargeDateMonth,5,2)
 destring yr mo, replace
 
+
+*drop FY 2013 (hurricane)
 gen ym = ym(yr, mo)
 format ym %tm
 keep if ym < ym(2012, 9) | ym > ym(2013,8)
 
-destring PATIENT_ID, replace
-
-*cpi
+destring patid, replace
 
 *destring cost & other variables
-foreach v of varlist Time Intervention tpostInt CMI {
+foreach v of varlist Time Intervention tpostInt dx* {
   destring `v', replace
 }
-foreach v of varlist ynel* {
-  gen x_`v' = `v'=="Present" & `v'!=""
-  replace x_`v' = . if `v'==""
-  drop `v'
-  rename x_`v' `v'
-}
-drop weightel*
-
-/* *create CMI deciles
-xtile cmiD = CMI, n(10) */
 
 xi i.season i.surgical i.female i.AgeGroup i.raceGroup i.ins i.ym i.cmiD
 
@@ -74,7 +68,7 @@ lab var Time "Time"
 lab var Intervention "Intervention"
 
 compress
-saveold patUse3, replace */
+saveold patUse3, replace
 
 *----------------------------
 *check if data correct monthly - yes
@@ -101,17 +95,17 @@ loc sp6 Time Intervention tpostInt _Iseason* CMI _Isurgical_2 `elix' _Ifemale_2 
 
 *Pharmacy_cpi Laboratory_cpi Radiology_cpi MRI_cpi Implants_cpi Blood_cpi ICU_cpi
 foreach y of varlist ICU_cpi {
-  forval n=1/6 {
-    reg `y' `sp`n'' if `y' > 0
-    matrix bb = e(b)
-    matrix list bb
+forval n=1/6 {
+reg `y' `sp`n'' if `y' > 0
+matrix bb = e(b)
+matrix list bb
 
-    twopm `y' `sp`n'', firstpart(logit) secondpart(glm, family(gamma) link(log)) search from(bb) iterate(50)
-    eststo : margins, dydx(Time Intervention tpostInt) post
-    *mat pr`n' = r(table)
-  }
-  esttab using `y'_me.tex, booktabs replace label f starlevels( * 0.10 ** 0.05 *** 0.010) cells(b(star fmt(3)) p(par fmt(3)) ci(par fmt(3))) stats(N, fmt(0))
-  eststo clear
+twopm `y' `sp`n'', firstpart(logit) secondpart(glm, family(gamma) link(log)) search from(bb) iterate(50)
+eststo : margins, dydx(Time Intervention tpostInt) post
+*mat pr`n' = r(table)
+}
+esttab using `y'_me.tex, booktabs replace label f starlevels( * 0.10 ** 0.05 *** 0.010) cells(b(star fmt(3)) p(par fmt(3)) ci(par fmt(3))) stats(N, fmt(0))
+eststo clear
 }*/
 
 *----------------------------
@@ -126,7 +120,7 @@ gen _Iym_`min' = ym==`min'
 loc y tvdc_cpi
 capture destring `y', replace
 
-loc elix ynel2 ynel3 ynel4 ynel5 ynel6 ynel7 ynel8 ynel9 ynel10 ynel11 ynel12 ynel13 ynel14 ynel15 ynel16 ynel17 ynel18 ynel19 ynel20 ynel21 ynel22 ynel23 ynel24 ynel25 ynel26 ynel27 ynel28 ynel29 ynel30 ynel31
+loc elix dx1 dx2 dx3 dx4 dx5 dx6 dx7 dx8 dx9 dx10 dx11 dx12 dx13 dx14 dx15 dx16 dx17 dx18 dx19 dx20 dx21 dx22 dx23 dx24 dx25 dx26 dx27 dx28 dx29
 loc sp _IcmiD* _Isurgical_2 `elix' _Ifemale_2 _IAgeGroup* _IraceGroup* _Iins*
 
 *all patients
@@ -206,26 +200,26 @@ mat score yhat=risk_betas if e(sample)
 gen exp_yhat = exp(yhat)
 
 foreach v of varlist _Iym_621 _Iym_622 {
-  di "`v'"
-  loc n colnumb(betas, "`v'")
-  capture drop racost_`v'
-  gen racost_`v' = exp(yhat)* ( exp(betas[1,`n']) - 1)
+di "`v'"
+loc n colnumb(betas, "`v'")
+capture drop racost_`v'
+gen racost_`v' = exp(yhat)* ( exp(betas[1,`n']) - 1)
 }*/
 
 
 /*foreach y of varlist Pharmacy_cpi Laboratory_cpi Radiology_cpi  MRI_cpi Implants_cpi Blood_cpi ICU_cpi OR_cpi supplies_cpi inhalation_cpi POT_cpi postop_cpi routine_cpi {
-  sum `y'
+sum `y'
 }*/
 
 
 /*forval i=1/3 {
-  scalar x = pr[6,`i']
-  loc ub`i': di %9.3f x
-  scalar x = pr[5,`i']
-  loc lb`i': di %9.3f x
+scalar x = pr[6,`i']
+loc ub`i': di %9.3f x
+scalar x = pr[5,`i']
+loc lb`i': di %9.3f x
 
-  loc ci`i' "(`lb`i'', `ub`i'')"
-  di "`ci`i''"
+loc ci`i' "(`lb`i'', `ub`i'')"
+di "`ci`i''"
 }
 
 esttab
