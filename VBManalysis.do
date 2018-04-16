@@ -5,15 +5,22 @@ capture ssc install estout
 set seed 39103
 
 insheet using patUse3.csv, comma nonames clear
+replace v48 = "dept" if v48=="NYU Reporting Department â€“ Most Recent_Desc" & _n==1
 
 foreach var of varlist * {
   capture replace `var' = trim(`var')
   capture rename `var' `=strtoname(`var'[1])'
 }
 rename t Time
-rename v40 Intervention
+rename v45 Intervention
 
 drop in 1/1
+
+gen yr = substr(DischargeDateMonth,1,4)
+gen mo = substr(DischargeDateMonth,5,2)
+destring yr mo, replace
+gen ym = ym(yr, mo)
+format ym %tm
 
 /* *manually change long var names
 foreach v of varlist * {
@@ -43,25 +50,18 @@ drop in 1/1
 keep if big=="FALSE"
 drop big _0 */
 
-* exclude FY 13
-gen yr = substr(DischargeDateMonth,1,4)
-gen mo = substr(DischargeDateMonth,5,2)
-destring yr mo, replace
-
-
-*drop FY 2013 (hurricane)
-gen ym = ym(yr, mo)
-format ym %tm
-keep if ym < ym(2012, 9) | ym > ym(2013,8)
-
 destring patid, replace
 
 *destring cost & other variables
-foreach v of varlist Time Intervention tpostInt dx* {
+replace oelos = "" if oelos=="Inf"
+
+foreach v of varlist Time Intervention tpostInt dx* tvdc_cpi los oelos* readmit death surgical {
   destring `v', replace
 }
 
-xi i.season i.surgical i.female i.AgeGroup i.raceGroup i.ins i.ym i.cmiD
+egen dp = group(dept)
+
+xi i.season i.surgical i.female i.AgeGroup i.raceGroup i.ins i.cmiD
 
 lab var tpostInt "Time after Intervention"
 lab var Time "Time"
@@ -107,6 +107,68 @@ eststo : margins, dydx(Time Intervention tpostInt) post
 esttab using `y'_me.tex, booktabs replace label f starlevels( * 0.10 ** 0.05 *** 0.010) cells(b(star fmt(3)) p(par fmt(3)) ci(par fmt(3))) stats(N, fmt(0))
 eststo clear
 }*/
+*----------------------------
+*patient-level analysis: replicate the GLM estimation using R
+use patUse3, clear
+
+loc xvar Time Intervention tpostInt _Iseason* _IcmiD* _Isurgical* dx1 dx2 dx3 dx4 dx5 dx6 dx7 dx8 dx9 dx10 dx11 dx12 dx13 dx14 dx15 dx16 dx17 dx18 dx19 dx20 dx21 dx22 dx23 dx24 dx25 dx26 dx27 dx28 dx29 _Ifemale* _IAgeGroup* _IraceGroup* _Iins*
+
+* cost outcomes
+loc yv tvdc_cpi
+glm `yv' `xvar', fam(gamma) link(log) vce(cluster dp)
+estimates store m1
+glm `yv' `xvar' if surgical==0, fam(gamma) link(log) vce(cluster dp)
+estimates store m2
+glm `yv' `xvar' if surgical==1, fam(gamma) link(log) vce(cluster dp)
+estimates store m3
+
+estout m1 m2 m3 using glm_cost.xls, cells(b(star fmt(3)) ci(fmt(3)) p(fmt(3))) transform(100*(exp(@)-1)) keep(Time Intervention tpostInt) starlevels(* 0.1 ** 0.05 *** 0.01) replace stats(N)
+
+* LOS outcomes
+loc yv los
+glm `yv' `xvar', fam(gamma) link(log) vce(cluster dp)
+estimates store m1
+
+*for expected LOS, use months in and after 2013/09
+preserve
+keep if ym >= ym(2013,9)
+
+tab ym, summarize(Time)
+replace Time = Time - 24
+tab ym, summarize(tpostInt)
+tab ym, summarize(Intervention)
+
+loc yv oelos
+glm `yv' `xvar' , fam(gamma) link(log) vce(cluster dp)
+estimates store m2
+
+loc yv oelos_gt15
+glm `yv' `xvar' if e(sample), fam(binomial) link(logit) vce(cluster dp)
+estimates store m3
+restore
+
+estout m1 m2 m3 using glm_los.xls, cells(b(star fmt(3)) ci(fmt(3)) p(fmt(3))) transform(100*(exp(@)-1)) keep(Time Intervention tpostInt) starlevels(* 0.1 ** 0.05 *** 0.01) replace stats(N)
+
+*health outcomes
+*for readmission outcome, use months in or after 2012/01
+preserve
+keep if ym >= ym(2012,1) & ym < ym(2017,12)
+
+tab ym, summarize(Time)
+replace Time = Time - 4
+tab ym, summarize(Time)
+
+loc yv readmit
+glm `yv' `xvar', fam(binomial) link(logit) vce(cluster dp)
+estimates store m1
+restore
+
+loc yv death
+glm `yv' `xvar', fam(binomial) link(logit) vce(cluster dp)
+estimates store m2
+
+estout m1 m2 using glm_health.xls, cells(b(star fmt(3)) ci(fmt(3)) p(fmt(3))) transform(100*(exp(@)-1)) keep(Time Intervention tpostInt) starlevels(* 0.1 ** 0.05 *** 0.01) replace stats(N)
+
 
 *----------------------------
 *for aggregate ITS, create Monthly total costs after adjusting for the patient characteristics using coefficient on month dummies

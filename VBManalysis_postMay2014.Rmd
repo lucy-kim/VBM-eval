@@ -39,12 +39,13 @@ library(dplyr)
 library(MASS)
 library(reshape2)
 library(scales)
+library(plm)
 
-# load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014 (Lucy.Kim@nyumc.org 2).RData")
+load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014 (Lucy.Kim@nyumc.org 2).RData")
 # load("~/Box Sync/VBM/Data/sample-full2017-raw.RData")
 
-pat <- read_excel("~/Box Sync/VBM/Data/Patient Level Data with expense grouping deidentified 1052017.xlsx", guess_max=288364)
-pat2 <- read_excel("~/Box Sync/VBM/Data/Sep 2016 - Dec 2017 VBM Paper deintentified.xlsx", guess_max=94160)
+# pat <- read_excel("~/Box Sync/VBM/Data/Patient Level Data with expense grouping deidentified 1052017.xlsx", guess_max=288364)
+# pat2 <- read_excel("~/Box Sync/VBM/Data/Sep 2016 - Dec 2017 VBM Paper deintentified.xlsx", guess_max=94160)
 
 NROW(pat)
 # str(pat)
@@ -188,6 +189,20 @@ NROW(patUse)
 focus on inpatient cases in Tisch 
 ```{r}
 table(patUse$`Custom Patient Type`)
+
+test <- subset(patUse, DischargeDateMonth>="201401" & DischargeDateMonth<="201404")
+table(test$`Custom Patient Type`)
+# Tisch had 8592 discharges out of 10142 = 8592/10142 = 85% (exclude TS b/c it has zero cost)
+
+# total inpatient costs
+ddply(test, .(`Custom Patient Type`), summarise, totalcost = sum(`Enc - Total Variable Direct Cost`))
+#   Custom Patient Type  totalcost
+# 1                  HI  21475423
+# 2                  TI 87266107
+sum(test$`Enc - Total Variable Direct Cost`)
+# 108741530
+# 87266107/108741530 = 80%
+
 patUse <- subset(patUse, !is.na(`Custom Patient Type`) & `Custom Patient Type` %in% c("TI"))
 NROW(patUse)
 ```
@@ -728,7 +743,7 @@ save(pat, pat2, pat3, patUse, patUse2, patUse3, dateLookUp, elix_sas, file="~/Bo
 
 save the discharge level data as CSV file for aggregate analysis
 ```{r}
-v <- c("patid","DischargeDateMonth","tvdc_cpi", "dx1","dx2", "dx3", "dx4", "dx5", "dx6", "dx7", "dx8", "dx9", "dx10", "dx11", "dx12", "dx13", "dx14", "dx15", "dx16", "dx17", "dx18", "dx19", "dx20", "dx21", "dx22", "dx23", "dx24", "dx25", "dx26", "dx27", "dx28", "dx29", "cmiD", "surgical", "female", "AgeGroup", "raceGroup", "ins", "t", "int", "tpostInt", "season")
+v <- c("patid","DischargeDateMonth","tvdc_cpi", "los", "oelos", "oelos_gt15", "readmit", "death","dx1","dx2", "dx3", "dx4", "dx5", "dx6", "dx7", "dx8", "dx9", "dx10", "dx11", "dx12", "dx13", "dx14", "dx15", "dx16", "dx17", "dx18", "dx19", "dx20", "dx21", "dx22", "dx23", "dx24", "dx25", "dx26", "dx27", "dx28", "dx29", "cmiD", "surgical", "female", "AgeGroup", "raceGroup", "ins", "t", "int", "tpostInt", "season", "NYU Reporting Department â€“ Most Recent_Desc")
 test <- patUse3[v]
 write.csv(test, file="~/Box Sync/VBM/Data/patUse3.csv", row.names = FALSE, col.names=TRUE)
 ```
@@ -741,9 +756,28 @@ write.csv(test, file="~/Box Sync/VBM/Data/patUse3.csv", row.names = FALSE, col.n
 load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014 (Lucy.Kim@nyumc.org 2).RData")
 ```
 
-### Sub-category costs are variable costs only? 
+### test for serial correlation in error terms within a group
 ```{r}
-str(patUse2)
+patUse3 <- subset(patUse2, DischargeDateMonth < "201209" | DischargeDateMonth > "201308")
+
+table(patUse3$`NYU Reporting Department â€“ Most Recent_Desc`)
+
+pd <- pdata.frame(patUse3, index = c("NYU Reporting Department â€“ Most Recent_Desc", "DischargeDateMonth"))
+
+pwtest()
+
+form <- formula(tvdc_cpi ~ t + int + tpostInt + season  + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup + ins)
+pool <- plm(form, data = patUse3, model="pooling")
+pwtest(pool)
+
+pwtest(tvdc_cpi ~ t + int + tpostInt + season  + cmiD + surgical + dx1 + dx2 + dx3 + dx4 + dx5 + dx6 + dx7 + dx8 + dx9 + dx10 + dx11 + dx12 + dx13 + dx14 + dx15 + dx16 + dx17 + dx18 + dx19 + dx20 + dx21 + dx22 + dx23 + dx24 + dx25 + dx26 + dx27 + dx28 + dx29 + female + AgeGroup + raceGroup + ins, data = patUse3, effect = "pooling")
+
+ glm(formula = x,
+              data = patUse3,
+              family=Gamma(link="log"),
+              na.action="na.omit",
+              start=c(20, rep(0,k-1)))
+              
 ```
 
 
@@ -757,11 +791,22 @@ covar <- c("female", "AgeGroup", "raceGroup", "CMI","NYU Reporting Department â
 covar_lab <- c("Female", "ageGroup", "Race/ethnicity", "DRG weight", "Service line", "Payer")
 summary(patUse3[covar])
 
+ddply(patUse3, .(int), summarize, mean = mean(Age))
+
 table(patUse3$female, patUse3$int)
 table(patUse3$AgeGroup, patUse3$int)
 table(patUse3$raceGroup, patUse3$int)
 table(patUse3$`NYU Reporting Department â€“ Most Recent_Desc`, patUse3$int)
 table(patUse3$ins, patUse3$int)
+
+summary(patUse3$oel)
+test <- patUse3[,c("tvdc_cpi", "los","oelos","oelos_gt15","readmit","death","int","surgical")]
+ddply(test, .(int), numcolwise(mean))
+#   int tvdc_cpi      los oelos oelos_gt15    readmit       death
+# 1   0 9326.520 4.574951   Inf  0.6794152 0.06512109 0.009746013
+# 2   1 9513.153 4.537724   Inf  0.1305052 0.08192515 0.009413430
+ddply(test, .(int, surgical), numcolwise(mean))
+
 
 costs <- c("tvdc", "Pharmacy", "Laboratory", "Radiology",  "MRI", "ICU_postop", "implants_supplies","Blood", "OR", "inhalation","POT", "routine")
 costs_cpi_cmi <- paste(costs, "_cpi_cmi", sep="")
@@ -1107,6 +1152,7 @@ load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014 (Lucy.Kim@nyumc.org 2
 test <- ddply(patUse3, .(DischargeDateMonth), summarise, int = mean(int), tpostInt = mean(tpostInt), t = mean(t))
 View(test)
 ```
+
 
 #### Main outcome: Total variable direct cost
 
@@ -2013,7 +2059,6 @@ health_y_lab <- c("Indicator for readmission")
 table(patUse2$DischargeDateMonth, patUse2$readmit==1) # readmission=0 always before 2012/01
 table(patUse2$DischargeDateMonth, patUse2$death==1) # readmission=0 always before 2012/01
 
-# should use pre-period 2013/09 - 2014/04 only when outcome = O/E ratio
 patUse3 <- patUse2[patUse2$DischargeDateMonth >= "201201" ,]
 
 patUse3 <- subset(patUse3, (DischargeDateD < "2012-09-01" | DischargeDateD > "2013-08-31") & DischargeDateMonth!="201712")
@@ -2185,20 +2230,19 @@ test <- merge(patUse3, monthly_cost, by="int")
 # plot % change for all patients
 test$tvdc_cpi_cmi_gr <-  100*(test$tvdc_cpi_cmi - 5262.270)/5262.270
 
-pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmi_gr.tiff")
+pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmi_gr.pdf")
 my.xmr.x <- qcc(data =  qcc.groups(test$tvdc_cpi_cmi_gr[test$int==0],
                                    test$DischargeDateMonth[test$int==0]),
                  newdata= qcc.groups(test$tvdc_cpi_cmi_gr[test$int==1],
                                      test$DischargeDateMonth[test$int==1]),
-                title="",
+                title="All patients",
                 type = "xbar",
                 ylim=c(-20,20),
                 ylab="Percentage change (%)",
                 xlab="Month",
                 axes.las = 1,
                 add.stats = F,
-                label.limits = c("",""),
-                confidence.level = .95
+                label.limits = c("","")
                 )
 dev.off()
 
@@ -2210,38 +2254,36 @@ ddply(patUse3, .(int, surgical), summarise, tvdc_cpi_cmim=mean(tvdc_cpi_cmi, na.
 test$tvdc_cpi_cmi_gr <- ifelse(test$pattype=="Surgical", 100*(test$tvdc_cpi_cmi - 5481.823)/5481.823, 100*(test$tvdc_cpi_cmi - 5125.333)/5125.333)
 
 # surgical
-pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmi_gr_surg.tiff")
+pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmi_gr_surg.pdf")
 my.xmr.x <- qcc(data =  qcc.groups(test$tvdc_cpi_cmi_gr[test$int==0 & test$pattype=="Surgical"],
                                    test$DischargeDateMonth[test$int==0 & test$pattype=="Surgical"]),
                  newdata= qcc.groups(test$tvdc_cpi_cmi_gr[test$int==1 & test$pattype=="Surgical"],
                                      test$DischargeDateMonth[test$int==1 & test$pattype=="Surgical"]),
-                title="",
+                title="Surgical patients",
                 type = "xbar",
                 ylim=c(-20,20),
                 ylab="Percentage change (%)",
                 xlab="Month",
                 axes.las = 1,
                 # add.stats = F,
-                label.limits = c("",""),
-                confidence.level = .95
+                label.limits = c("","")
                 )
 dev.off()
 
 # medical
-pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmi_gr_med.tiff")
+pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmi_gr_med.pdf")
 my.xmr.x <- qcc(data =  qcc.groups(test$tvdc_cpi_cmi_gr[test$int==0 & test$pattype=="Medical"],
                                    test$DischargeDateMonth[test$int==0 & test$pattype=="Medical"]),
                  newdata= qcc.groups(test$tvdc_cpi_cmi_gr[test$int==1 & test$pattype=="Medical"],
                                      test$DischargeDateMonth[test$int==1 & test$pattype=="Medical"]),
-                title="",
+                title="Medical patients",
                 type = "xbar",
                 ylim=c(-20,20),
                 ylab="Percentage change (%)",
                 xlab="Month",
                 axes.las = 1,
                 add.stats = F,
-                label.limits = c("",""),
-                confidence.level = .95
+                label.limits = c("","")
                 )
 dev.off()
 
