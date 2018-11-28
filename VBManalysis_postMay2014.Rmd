@@ -8,7 +8,7 @@ output: html_document
 # Evaluation of the VBM
 
 ## Motivation
-The NYU Langone Health has been consistently ranked high in terms of quality but also high in terms of costs per case among academic medical centers nationally even after the adjustment for the case mix and wage indices. Thus, the NYULMH implemented value-based management program to achieve reducing costs and improving value of care which can be defined as quality achieved per dollar spent. We aim to evaluate the impact of this program in terms of variable direct cost per case and quality, and estimate cost savings to date.
+The NYU Langone Health has been consistently ranked high in terms of quality but also high in terms of costs per case among academic medical centers nationally even after the adjustment for the case mix and wage indices. Thus, the NYULMH implemented value-based management (VBM) program to reduce costs and improve value of healthcare which can be defined as quality achieved per dollar spent. We aim to evaluate the impact of this program in terms of variable direct cost per case and quality, and estimate cost savings to date.
 
 This analysis code marks May 2014 as the first month of the post-intervention period. 
 
@@ -41,11 +41,26 @@ library(reshape2)
 library(scales)
 library(plm)
 
-load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014 (Lucy.Kim@nyumc.org 2).RData")
+load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014.RData")
 # load("~/Box Sync/VBM/Data/sample-full2017-raw.RData")
 
-# pat <- read_excel("~/Box Sync/VBM/Data/Patient Level Data with expense grouping deidentified 1052017.xlsx", guess_max=288364)
+pat <- read_excel("~/Box Sync/VBM/Data/Patient Level Data with expense grouping deidentified 1052017.xlsx", guess_max=288364)
 # pat2 <- read_excel("~/Box Sync/VBM/Data/Sep 2016 - Dec 2017 VBM Paper deintentified.xlsx", guess_max=94160)
+pat2 <- read_excel("~/Box Sync/VBM/Data/Sep 2016 - Dec 2017 VBM Paper deintentified_Updated 5.14.18.xlsx", guess_max=94160)
+
+# drop existing readmission flags from the Sep 2016-Dec 2017 data
+myvars <- names(pat2) %in% c("NYU Vizient Readmit Flag") 
+pat2 <- pat2[!myvars]
+
+# readmission indicators in patUse (from "Sep 2016 - Dec 2017 VBM Paper deintentified_Updated 5.14.18.xlsx") underreport readmission rate for Dec 2017, so replace the readmission indicator with data from another file "Sep 2016 - Dec 2017 VBM Paper deintentified_Updated 5.11.18.xlsx"
+pat_readmit <- read_excel("~/Box Sync/VBM/Data/Sep 2016 - Dec 2017 VBM Paper deintentified_Updated 5.11.18.xlsx", guess_max=94160)
+
+# restrict to only patient ID and readmission flag
+myvars <- c("PATIENT ID", "NYU Vizient Readmit Flag")
+test <- pat_readmit[myvars]
+
+pat2_test <- merge(pat2, test, all.x = TRUE, by="PATIENT ID") 
+pat2 <- pat2_test 
 
 NROW(pat)
 # str(pat)
@@ -97,6 +112,11 @@ max(patUse$DischargeDateD ) #  "2017-12-31"
 
 patUse$DischargeDateMonth <- format(patUse$DischargeDateD  , "%Y%m")  
 NROW(patUse)
+
+# check readmission rate across months
+patUse$readmit <- ifelse(patUse$`NYU Vizient Readmit Flag`=="Y" & !is.na(patUse$`NYU Vizient Readmit Flag`), 1, 0)
+summary(patUse$readmit)
+ddply(patUse, .(DischargeDateMonth), summarise, M=mean(readmit))
 # test <- subset(patUse, !is.na(`Enc - Primary ICD10 Surgical Procedure`))
 # View(test$`Enc - Primary ICD10 Surgical Procedure`)
 ```
@@ -206,44 +226,6 @@ sum(test$`Enc - Total Variable Direct Cost`)
 patUse <- subset(patUse, !is.na(`Custom Patient Type`) & `Custom Patient Type` %in% c("TI"))
 NROW(patUse)
 ```
-
-
-Exclude LOS = 1 day and reporting department = Medicine - SKIP: Don't apply this rule any more
-```{r}
-sum(is.na(patUse$`NYU Reporting Department â€“ Most Recent_Desc`))
-table(patUse$`NYU Reporting Department â€“ Most Recent_Desc`) # "Medicine"
-
-patUse$los_eq1 <- ifelse(patUse$`Length of Stay`==1 & patUse$`NYU Reporting Department â€“ Most Recent_Desc`=="Medicine", 1,0)
-table(patUse$los_eq1)
-
-# test <- subset(patUse, patUse$`NYU Reporting Department â€“ Most Recent_Desc`=="Medicine")
-# test <- ddply(test, .(DischargeDateMonth), summarise, share = mean(los_eq1), num = sum(los_eq1))
-# 
-# test$num[test$DischargeDateMonth >= "201209" & test$DischargeDateMonth <= "201308"] <- NA
-# test$share[test$DischargeDateMonth >= "201209" & test$DischargeDateMonth <= "201308"] <- NA
-# 
-# # plot the share of discharges who have LOS=1 & reporting dept = medicine
-# ggplot(test, aes(x=DischargeDateMonth, y=share, group=1)) +
-#   geom_line() +
-#   ylim(0,1) +
-#   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-#   geom_vline(aes(xintercept=33), colour="red") +
-#   labs(title="Share of discharges having LOS=1 in the reporting department Medicine",
-#        x="Month", y="Share of discharges in the Medicine department")
-# ggsave("~/Dropbox/Research/VBM/results/share_los1_medicine.png", width=20, height=10, units="cm")
-# 
-# ggplot(test, aes(x=DischargeDateMonth, y=num, group=1)) +
-#   geom_line() +
-#   # ylim(0,1) +
-#   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-#   geom_vline(aes(xintercept=33), colour="red") +
-#   labs(title="Number of discharges having LOS=1 in the reporting department Medicine",
-#        x="Month", y="Number of discharges in the Medicine department")
-# ggsave("~/Dropbox/Research/VBM/results/num_los1_medicine.png", width=20, height=10, units="cm")
-# 
-# patUse <- subset(patUse, los_eq1==0)
-```
-
 
 ## Adjust costs for inflation
 Before anything, Robustness Check: Compare with the stats reported in "VBM Task Force Deck_Aug 2017 (DRAFT).pdf"
@@ -510,6 +492,7 @@ create time trend, post dummmy, time post intervention trend variables
 allDates <- sort(unique(patUse$DischargeDateMonth))
 
 lastpremonthidx <- 32 # 36 for Aug 2014
+allDates[lastpremonthidx]=="201404"
 nmonths <- length(allDates)
 
 # will drop April 2014 - Aug 2014 later as this is a transition period (first VBM mtg on 4/19/2014)
@@ -573,8 +556,9 @@ patUse$implants_supplies_cpi <- patUse$Implants_cpi + patUse$supplies_cpi
 create observed / expected LOS using `NYU Vizient Expected LOS`  
 ```{r}
 colnames(patUse)[which(colnames(patUse)=="NYU Vizient Expected LOS")] <- "explos"
-table(patUse$explos)
-# 34381 have 0 expected LOS
+summary(patUse$explos)
+#expected LOS = 0 before 2012/09
+ddply(patUse, .(DischargeDateMonth), summarise, M=mean(explos))
 
 patUse$oelos <- patUse$`Length of Stay` / (patUse$explos)
 ```
@@ -592,6 +576,9 @@ create readmission outcome
 ```{r}
 patUse$readmit <- ifelse(patUse$`NYU Vizient Readmit Flag`=="Y" & !is.na(patUse$`NYU Vizient Readmit Flag`), 1, 0)
 summary(patUse$readmit) 
+#expected LOS = 0 before 2012/09
+ddply(patUse, .(DischargeDateMonth), summarise, M=mean(readmit))
+
 ```
 
 create mortality outcome
@@ -752,9 +739,15 @@ write.csv(test, file="~/Box Sync/VBM/Data/patUse3.csv", row.names = FALSE, col.n
 
 ## Discharge-level analysis
 ```{r}
-# load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014.RData")
-load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014 (Lucy.Kim@nyumc.org 2).RData")
+load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014.RData")
 ```
+
+### frequency table of the division within medicine and surgery DRG group
+```{r}
+test <- table(patUse3$`NYU Reporting Department â€“ Most Recent_Desc`, patUse3$surgical)
+write.csv(test, "~/Dropbox/Research/VBM/results/cohortfreq.csv", col.names=TRUE)
+```
+
 
 ### test for serial correlation in error terms within a group
 ```{r}
@@ -791,13 +784,44 @@ covar <- c("female", "AgeGroup", "raceGroup", "CMI","NYU Reporting Department â
 covar_lab <- c("Female", "ageGroup", "Race/ethnicity", "DRG weight", "Service line", "Payer")
 summary(patUse3[covar])
 
-ddply(patUse3, .(int), summarize, mean = mean(Age))
+ddply(patUse3, .(int), summarize, mean = mean(Age), SD = sd(Age))
+t.test(Age ~ int, data = patUse3) # t-test of mean difference
+
+# DRG weight
+ddply(patUse3, .(int), summarize, mean = mean(CMI), SD = sd(CMI))
+t.test(CMI ~ int, data = patUse3) # t-test of mean difference
+
+# Elixhauser comorbidity counts/patient
+dxvar <- paste0("dx",1:29)
+patUse3$DXcount <- rowSums(patUse3[dxvar], na.rm = TRUE)
+ddply(patUse3, .(int), summarize, mean = mean(DXcount), SD = sd(DXcount))
 
 table(patUse3$female, patUse3$int)
 table(patUse3$AgeGroup, patUse3$int)
 table(patUse3$raceGroup, patUse3$int)
 table(patUse3$`NYU Reporting Department â€“ Most Recent_Desc`, patUse3$int)
 table(patUse3$ins, patUse3$int)
+
+# test of difference in proportions / means for service lines
+test <- ddply(patUse3, .(int), summarise, total = length(female))
+
+tbl <- table(patUse3$`NYU Reporting Department â€“ Most Recent_Desc`, patUse3$int)
+
+prop.test(tbl[5,], test$total) # medicine
+prop.test(tbl[6,], test$total) # neuro
+prop.test(tbl[17,], test$total) # surgery
+prop.test(tbl[8,], test$total) # ob-gyn
+prop.test(tbl[14,], test$total) # pediatrics
+
+tbl2 <- as.data.frame(tbl[c(2:4,7,9:13,15:16,18),])
+test2 <- ddply(tbl2, .(Var2), summarize, N = sum(Freq))
+prop.test(test2$N, test$total)
+
+test <- patUse3[c("female","int")]
+
+test$female <- as.numeric(test$female)-1
+test <- ddply(test, .(int), summarise, count = sum(female), total = length(female))
+prop.test(test$count, test$total)
 
 summary(patUse3$oel)
 test <- patUse3[,c("tvdc_cpi", "los","oelos","oelos_gt15","readmit","death","int","surgical")]
@@ -1147,7 +1171,7 @@ ggsave("~/Dropbox/Research/VBM/results/dxsum_trajectory_bypattype.pdf", width=20
 
 just before running regressions, suppress to NA the discharge dates 9/2012 - 8/2013
 ```{r}
-load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014 (Lucy.Kim@nyumc.org 2).RData")
+load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014.RData")
 
 test <- ddply(patUse3, .(DischargeDateMonth), summarise, int = mean(int), tpostInt = mean(tpostInt), t = mean(t))
 View(test)
@@ -2214,7 +2238,7 @@ sink(file=NULL)
 ```
 
 
-## SPC of inflation & CMI adjsuted total costs
+# SPC of inflation & CMI adjsuted total costs
 ```{r}
 library(qcc)
 
@@ -2230,7 +2254,7 @@ test <- merge(patUse3, monthly_cost, by="int")
 # plot % change for all patients
 test$tvdc_cpi_cmi_gr <-  100*(test$tvdc_cpi_cmi - 5262.270)/5262.270
 
-pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmi_gr.pdf")
+# pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmi_gr.pdf")
 my.xmr.x <- qcc(data =  qcc.groups(test$tvdc_cpi_cmi_gr[test$int==0],
                                    test$DischargeDateMonth[test$int==0]),
                  newdata= qcc.groups(test$tvdc_cpi_cmi_gr[test$int==1],
@@ -2265,7 +2289,7 @@ my.xmr.x <- qcc(data =  qcc.groups(test$tvdc_cpi_cmi_gr[test$int==0 & test$patty
                 ylab="Percentage change (%)",
                 xlab="Month",
                 axes.las = 1,
-                # add.stats = F,
+                add.stats = F,
                 label.limits = c("","")
                 )
 dev.off()
@@ -2340,7 +2364,7 @@ dev.off()
 ```
 
 
-## Aggregate analysis at the monthly/weekly level
+# Aggregate analysis at the monthly/weekly level
 The following analysis is at the aggregate level using monthly data.  
 
 export patient discharge level data to get coefficients on month dummies while controlling for patient vars
@@ -2354,27 +2378,28 @@ write.csv(patUse3, file="~/Box Sync/VBM/Data/patUse3.csv")
 
 
 
-### Create the monthly time-series data of risk-adjusted TVDC 
+## Create the monthly time-series data of risk-adjusted TVDC 
 
 import risk-adjusted total costs, which are month fixed effect coefficientss estimated with patient characteristics controls using the discharge-level data in Stata (VBManalysis.do)
 
 ```{r}
 
 # import risk-adjusted total costs, which are month fixed effect coefficientss estimated with patient characteristics controls using the discharge-level data in Stata (VBManalysis.do)
-racost <- read.csv("~/Dropbox/Research/VBM/data/ra_tvdc_cpi_monthly.csv")
+racost <- read.csv("~/Dropbox/Research/VBM/data/ra_tvdc_cpi_monthly_050918.csv")
 library(zoo)
 racost$tt <- as.yearmon(paste(racost$yr, racost$month, sep = "-"))
 racost$DischargeDateMonth <- format(racost$tt, "%Y%m")
-colnames(racost)[which(colnames(racost)=="ra_month")] <- "tvdc_cpi"
+
+colnames(racost)[which(colnames(racost)=="ra_month_all")] <- "tvdc_cpi"
 colnames(racost)[which(colnames(racost)=="ra_month_surg0")] <- "tvdc_cpi_surg0"
 colnames(racost)[which(colnames(racost)=="ra_month_surg1")] <- "tvdc_cpi_surg1"
 racost <- racost[c("tvdc_cpi", "tvdc_cpi_surg1", "tvdc_cpi_surg0", "DischargeDateMonth")]
 
 # add in FY 13
-allDates <- as.data.frame(sort(unique(patUse2$DischargeDateMonth)))
+allDates <- as.data.frame(sort(unique(patUse$DischargeDateMonth)))
 names(allDates) <- "DischargeDateMonth"
 
-lastpremonthidx <- 31
+lastpremonthidx <- 32
 nmonths <- length(allDates$DischargeDateMonth)
 
 allDates$int <- c(rep(0, lastpremonthidx), rep(1, nmonths-lastpremonthidx))
@@ -2383,21 +2408,32 @@ allDates$t <- 1:nmonths
 # aggregate data
 racost <- merge(racost, allDates, by="DischargeDateMonth", all.y=TRUE)
 
+# create % change from the pre-intervention mean
+ddply(racost, .(int), summarise, Mall = mean(tvdc_cpi, na.rm=TRUE), Msurg0 = mean(tvdc_cpi_surg0, na.rm=TRUE), Msurg1 = mean(tvdc_cpi_surg1, na.rm=TRUE))
+#   int     Mall   Msurg0   Msurg1
+# 1   0 2809.575 2626.095 34150.72
+
+racost$pch <- 100*(racost$tvdc_cpi - 2809.575)/2809.575
+racost$pch_surg0 <- 100*(racost$tvdc_cpi_surg0 - 2626.095)/2626.095
+racost$pch_surg1 <- 100*(racost$tvdc_cpi_surg1 - 34150.72)/34150.72
+
 # time-series data
-aggData.ts <- ts(racost, start=c(2011,9), end=c(2017,5), frequency = 12)
+aggData.ts <- ts(racost, start=c(2011,9), end=c(2017,12), frequency = 12)
 summary(aggData.ts)
 
 plot(aggData.ts[,c("tvdc_cpi")], ylim=c(0,10000) ) # plot avg total variable direct cost
 ```
 
 
-### ITS model using the patient risk adjusted TVDC
+## ITS model using the patient risk adjusted TVDC
 
 Work out AR / MA order of time series
 ```{r}
 costs_cpi <- c("tvdc_cpi","tvdc_cpi_surg1", "tvdc_cpi_surg0")
-for (col in costs_cpi) {
-  pdf(paste("/Users/kunheekim/Dropbox/Research/VBM/results/acf_",col,".pdf", sep=""))
+pch <- c("pch", "pch_surg0", "pch_surg1")
+
+for (col in pch) {
+  pdf(paste("~/Dropbox/Research/VBM/results/acf_",col,".pdf", sep=""))
   par(mfrow=c(2,1))
   acf(aggData.ts[,col], na.action = na.pass )
   pacf(aggData.ts[,col], na.action = na.pass )
@@ -2547,13 +2583,13 @@ f_splitPlot2_glm <- function ( plotTimeSeries, switchObservation, frequency, fir
 }
 ```
 
-Run ITS model with marginal effects from the patient-level analysis
+Run ITS model with marginal effects from the patient-level analysis - using actual cost scale 
 ```{r}
-# PACF order= 1 for all pats; =3 for surg, =5 for med pats
+# PACF order= 3 for all & medical pats; =1 for med pats
 
 y <- c("tvdc_cpi")
 y_ul <- c(4000)
-y_lab <- c("Patient risk-adjusted total variable direct costs")
+y_lab <- c("Patient risk-adjusted total variable direct costs \nAll patients")
 round = rep(3, length(y))
 
 init <- 0
@@ -2570,7 +2606,7 @@ for (col in y) {
                      lastPreMonth = c(2014,4),
                      firstPostMonth = c(2014,5),
                      lastMonth=c(2017,12),
-                     arOrder=1,
+                     arOrder=3,
                      ylim=c(0,y_ul[init]),
                      ylab=paste0(y_lab[init]," ($)"),
                      main=paste0("Interrupted Time Series Model", "\n", y_lab[init]),
@@ -2578,6 +2614,10 @@ for (col in y) {
   )
   dev.off()
 }
+
+# Box.test(aggData.ts[,2], lag = 1, type = "Ljung")
+# model <- glm(aggData.ts[,2] ~ time + intervention +  timeAfterIntervention, data = aggData.ts[,2])
+# durbin.watson(model)
 
 y <- c("tvdc_cpi_surg1")
 y_ul <- c(50000)
@@ -2598,7 +2638,7 @@ for (col in y) {
                      lastPreMonth = c(2014,4),
                      firstPostMonth = c(2014,5),
                      lastMonth=c(2017,12),
-                     arOrder=2,
+                     arOrder=1,
                      ylim=c(0,y_ul[init]),
                      ylab=paste0("Patient risk-adjusted total variable direct costs"," ($)"),
                      main=paste0("Interrupted Time Series Model", "\n", y_lab[init]),
@@ -2626,7 +2666,7 @@ for (col in y) {
                      lastPreMonth = c(2014,4),
                      firstPostMonth = c(2014,5),
                      lastMonth=c(2017,12),
-                     arOrder=4,
+                     arOrder=3,
                      ylim=c(0,y_ul[init]),
                      ylab=paste0("Patient risk-adjusted total variable direct costs"," ($)"),
                      main=paste0("Interrupted Time Series Model", "\n", y_lab[init]),
@@ -2635,6 +2675,180 @@ for (col in y) {
   dev.off()
 }
 ```
+
+
+Run ITS model with marginal effects from the patient-level analysis - using % change from the pre-intervention mean 
+```{r}
+# PACF order= 3 for all & medical pats; =1 for med pats
+
+y <- c("pch")
+y_ul <- c(15)
+y_lab <- c("% Change in patient risk-adjusted costs from pre-VBM mean\nAll patients")
+round = rep(3, length(y))
+
+init <- 0
+for (col in y) {
+  init <-  init + 1
+  pdf(paste("~/Dropbox/Research/VBM/results/its_",col,".pdf", sep=""))
+  rr <- paste0("its_",col)
+
+  print(col)
+  rr <- f_splitPlot2(aggData.ts[,col],
+                     switchObservation=32,
+                     frequency = 12,
+                     firstMonth = c(2011,9),
+                     lastPreMonth = c(2014,4),
+                     firstPostMonth = c(2014,5),
+                     lastMonth=c(2017,12),
+                     arOrder=3,
+                     ylim=c(-1*y_ul[init],y_ul[init]),
+                     ylab="Percentage change (%)",
+                     main=paste0("Interrupted Time Series Model", "\n", y_lab[init]),
+                     r=round
+  )
+  dev.off()
+}
+
+# Box.test(aggData.ts[,2], lag = 1, type = "Ljung")
+# model <- glm(aggData.ts[,2] ~ time + intervention +  timeAfterIntervention, data = aggData.ts[,2])
+# durbin.watson(model)
+
+y <- c("pch_surg1")
+y_ul <- c(15)
+y_lab <- c("% Change in patient risk-adjusted costs from pre-VBM mean\nSurgical patients")
+round = rep(3, length(y))
+
+init <- 0
+for (col in y) {
+  init <-  init + 1
+  pdf(paste("~/Dropbox/Research/VBM/results/its_",col,".pdf", sep=""))
+  rr <- paste0("its_",col)
+
+  print(col)
+  rr <- f_splitPlot2(aggData.ts[,col],
+                     switchObservation=32,
+                     frequency = 12,
+                     firstMonth = c(2011,9),
+                     lastPreMonth = c(2014,4),
+                     firstPostMonth = c(2014,5),
+                     lastMonth=c(2017,12),
+                     arOrder=1,
+                     ylim=c(-1*y_ul[init],y_ul[init]),
+                     ylab="Percentage change (%)",
+                     main=paste0("Interrupted Time Series Model", "\n", y_lab[init]),
+                     r=round
+  )
+  dev.off()
+}
+
+y <- c("pch_surg0")
+y_ul <- c(15)
+y_lab <- c("% Change in patient risk-adjusted costs from pre-VBM mean\nMedical patients")
+round = rep(3, length(y))
+
+init <- 0
+for (col in y) {
+  init <-  init + 1
+  pdf(paste("~/Dropbox/Research/VBM/results/its_",col,".pdf", sep=""))
+  rr <- paste0("its_",col)
+
+  print(col)
+  rr <- f_splitPlot2(aggData.ts[,col],
+                     switchObservation=32,
+                     frequency = 12,
+                     firstMonth = c(2011,9),
+                     lastPreMonth = c(2014,4),
+                     firstPostMonth = c(2014,5),
+                     lastMonth=c(2017,12),
+                     arOrder=3,
+                     ylim=c(-1*y_ul[init],y_ul[init]),
+                     ylab="Percentage change (%)",
+                     main=paste0("Interrupted Time Series Model", "\n", y_lab[init]),
+                     r=round
+  )
+  dev.off()
+}
+```
+
+# SPC of risk-adjsuted total costs (estimated from running the patient-level analysis) - used for paper
+```{r}
+library(qcc)
+# to implement own version: http://blog.yhat.com/posts/quality-control-in-r.html
+
+racost2 <- subset(racost, (DischargeDateMonth < "201209" | DischargeDateMonth > "201308"))
+
+names(racost2$DischargeDateMonth) <- racost2$DischargeDateMonth
+
+# normalize the cost by substracting the mean cost and dividing by the SD of the cost during the pre-period (2011/09 - 2012/04) 
+monthly_cost <- ddply(racost2, .(int), summarise, tvdc_cpiM=mean(tvdc_cpi, na.rm=TRUE), tvdc_cpi_surg0M=mean(tvdc_cpi_surg0, na.rm=TRUE), tvdc_cpi_surg1M=mean(tvdc_cpi_surg1, na.rm=TRUE))
+# mean cost in pre
+# all patients = 2809.575
+# med = 2626.095
+# surg = 34150.72
+
+# plot % change for all patients
+racost2$tvdc_cpi <-  100*(racost2$tvdc_cpi - 2809.575)/2809.575
+racost2$tvdc_cpi_surg0 <-  100*(racost2$tvdc_cpi_surg0 - 2626.095)/2626.095
+racost2$tvdc_cpi_surg1 <-  100*(racost2$tvdc_cpi_surg1 - 34150.72)/34150.72
+
+names(racost2$DischargeDateMonth) <- racost2$DischargeDateMonth
+
+# mark dots in yellow = run of at least 8 consecutive observations above/below the mean
+old <- qcc.options()
+qcc.options("run.length"=8)
+
+# all patients
+pdf("~/Dropbox/Research/VBM/results/qcc_racost.pdf")
+my.xmr.x <- qcc(data =  qcc.groups(racost2$tvdc_cpi[racost2$int==0],
+                                   racost2$DischargeDateMonth[racost2$int==0]),
+                 newdata= qcc.groups(racost2$tvdc_cpi[racost2$int==1],
+                                     racost2$DischargeDateMonth[racost2$int==1]),
+                title="All patients",
+                type = "xbar.one",
+                ylim=c(-15,15),
+                ylab="Percentage change (%) from pre-intervention mean",
+                xlab="Month",
+                axes.las = 1,
+                # add.stats = F,
+                label.limits = c("","")) 
+dev.off()
+
+# surgical
+pdf("~/Dropbox/Research/VBM/results/qcc_racost_surg1.pdf")
+my.xmr.x <- qcc(data =  qcc.groups(racost2$tvdc_cpi_surg1[racost2$int==0],
+                                   racost2$DischargeDateMonth[racost2$int==0]),
+                 newdata= qcc.groups(racost2$tvdc_cpi_surg1[racost2$int==1],
+                                     racost2$DischargeDateMonth[racost2$int==1]),
+                title="Surgical DRGs",
+                type = "xbar.one",
+                ylim=c(-15,15),
+                ylab="Percentage change (%) from pre-intervention mean",
+                xlab="Month",
+                axes.las = 1,
+                # add.stats = F,
+                label.limits = c("","")
+                )
+dev.off()
+
+# medical
+pdf("~/Dropbox/Research/VBM/results/qcc_racost_surg0.pdf")
+my.xmr.x <- qcc(data =  qcc.groups(racost2$tvdc_cpi_surg0[racost2$int==0],
+                                   racost2$DischargeDateMonth[racost2$int==0]),
+                 newdata= qcc.groups(racost2$tvdc_cpi_surg0[racost2$int==1],
+                                     racost2$DischargeDateMonth[racost2$int==1]),
+                title="Medical DRGs",
+                type = "xbar.one",
+                ylim=c(-15,15),
+                ylab="Percentage change (%)",
+                xlab="Month",
+                axes.las = 1,
+                # add.stats = F,
+                label.limits = c("","")
+                )
+dev.off()
+
+```
+
 
 
 Run ITS model and save plots for sub-category costs - skip
@@ -3432,7 +3646,7 @@ df <- subset(df, `Discharge Quarter`!="2011-4" & `Discharge Quarter`!="2012-1" &
 table(df$`Discharge Quarter`)
 
 # subset data to relevant variables
-v <- c("Hospital", "Discharge Quarter","Mean Total Cost (Obs)","Mean Direct Cost (Exp)","CMI", "Cases.x", "Cases.y", "Direct Cost Cases Reported")
+v <- c("Hospital", "Discharge Quarter","Mean Total Cost (Obs)","Mean Direct Cost (Obs)","CMI", "Cases.x", "Cases.y", "Direct Cost Cases Reported")
 df <- df[v]
 colnames(df)[3] <- "mtcost"
 colnames(df)[4] <- "mdcost"
@@ -3491,6 +3705,21 @@ vizdf$mdcost <- as.numeric(vizdf$mdcost)
 vizdf$mtcost <- as.numeric(vizdf$mtcost)
 vizdf$dcost_cases <- as.numeric(vizdf$dcost_cases)
 ```
+
+actual percentile score in each quarter based on mean direct cost divided by CMI
+```{r}
+vizdf$mdcost_adj <- vizdf$mdcost/vizdf$CMI
+
+library(dplyr)
+
+test <-  vizdf %>%
+ group_by(qt) %>% 
+ mutate(percrank=rank(mdcost_adj)/length(mdcost_adj))
+
+test <- test[,c("qt","Hospital","percrank","mdcost_adj","nyu")]
+subset(test, nyu==1)
+```
+
 
 check the cost & # cases trend for non-NYU hospitals
 ```{r}
