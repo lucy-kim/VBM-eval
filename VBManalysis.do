@@ -22,34 +22,6 @@ destring yr mo, replace
 gen ym = ym(yr, mo)
 format ym %tm
 
-/* *manually change long var names
-foreach v of varlist * {
-replace `v' = subinstr(`v', "Enc - ", "",.) in 1/1
-*replace `v' = subinstr(`v', "NYU Finance - ", "",.) in 1/1
-}
-replace v27 = "NYU report dept Most Recent" in 1/1
-replace v28 = "NYU report dept Most Recent_Desc" in 1/1
-replace v29 = "NYU report div Most Recent" in 1/1
-replace v30 = "NYU report div Most Recent_Desc" in 1/1
-replace v31 = "NYU report dept at_time_disch" in 1/1
-replace v32 = "NYU report div at_time_disch" in 1/1
-replace v83 = "ICD10 i.surgical proc" in 1/1
-replace v84 = "ICD10 i.surgical proc_desc" in 1/1
-replace v141 = "Time" in 1/1
-replace v142 = "Intervention" in 1/1
-
-gen init = 0
-foreach var of varlist * {
-replace init = init + 1
-capture replace `var' = trim(`var')
-capture rename `var' `=strtoname(`var'[1])'
-}
-drop init
-drop in 1/1
-
-keep if big=="FALSE"
-drop big _0 */
-
 destring patid, replace
 
 *destring cost & other variables
@@ -104,7 +76,7 @@ twopm `y' `sp`n'', firstpart(logit) secondpart(glm, family(gamma) link(log)) sea
 eststo : margins, dydx(Time Intervention tpostInt) post
 *mat pr`n' = r(table)
 }
-esttab using `y'_me.tex, booktabs replace label f starlevels( * 0.10 ** 0.05 *** 0.010) cells(b(star fmt(3)) p(par fmt(3)) ci(par fmt(3))) stats(N, fmt(0))
+esttab using `y'_me.tex, booktabs replace label f starlevels( * 0.10 ** 0.05 *** 0.010) cells(b(star fmt(2)) p(par fmt(2)) ci(par fmt(2))) stats(N, fmt(0))
 eststo clear
 }*/
 *----------------------------
@@ -115,18 +87,18 @@ loc xvar Time Intervention tpostInt _Iseason* _IcmiD* _Isurgical* dx1 dx2 dx3 dx
 
 * cost outcomes
 loc yv tvdc_cpi
-glm `yv' `xvar', fam(gamma) link(log) vce(cluster dp)
+glm `yv' `xvar', fam(gamma) link(log)
 estimates store m1
-glm `yv' `xvar' if surgical==0, fam(gamma) link(log) vce(cluster dp)
+glm `yv' `xvar' if surgical==0, fam(gamma) link(log)
 estimates store m2
-glm `yv' `xvar' if surgical==1, fam(gamma) link(log) vce(cluster dp)
+glm `yv' `xvar' if surgical==1, fam(gamma) link(log)
 estimates store m3
 
-estout m1 m2 m3 using glm_cost.xls, cells(b(star fmt(3)) ci(fmt(3)) p(fmt(3))) transform(100*(exp(@)-1)) keep(Time Intervention tpostInt) starlevels(* 0.1 ** 0.05 *** 0.01) replace stats(N)
+estout m1 m2 m3 using glm_cost.xls, cells(b(star fmt(2)) ci(fmt(2)) p(fmt(2))) transform(100*(exp(@)-1)) keep(Time Intervention tpostInt) starlevels(* 0.1 ** 0.05 *** 0.01) replace stats(N)
 
 * LOS outcomes
 loc yv los
-glm `yv' `xvar', fam(gamma) link(log) vce(cluster dp)
+glm `yv' `xvar', fam(gamma) link(log)
 estimates store m1
 
 *for expected LOS, use months in and after 2013/09
@@ -139,15 +111,15 @@ tab ym, summarize(tpostInt)
 tab ym, summarize(Intervention)
 
 loc yv oelos
-glm `yv' `xvar' , fam(gamma) link(log) vce(cluster dp)
+glm `yv' `xvar' , fam(gamma) link(log)
 estimates store m2
 
 loc yv oelos_gt15
-glm `yv' `xvar' if e(sample), fam(binomial) link(logit) vce(cluster dp)
+glm `yv' `xvar' if e(sample), fam(binomial) link(logit)
 estimates store m3
 restore
 
-estout m1 m2 m3 using glm_los.xls, cells(b(star fmt(3)) ci(fmt(3)) p(fmt(3))) transform(100*(exp(@)-1)) keep(Time Intervention tpostInt) starlevels(* 0.1 ** 0.05 *** 0.01) replace stats(N)
+estout m1 m2 m3 using glm_los.xls, cells(b(star fmt(2)) ci(fmt(2)) p(fmt(2))) transform(100*(exp(@)-1)) keep(Time Intervention tpostInt) starlevels(* 0.1 ** 0.05 *** 0.01) replace stats(N)
 
 *health outcomes
 *for readmission outcome, use months in or after 2012/01
@@ -159,15 +131,71 @@ replace Time = Time - 4
 tab ym, summarize(Time)
 
 loc yv readmit
-glm `yv' `xvar', fam(binomial) link(logit) vce(cluster dp)
+glm `yv' `xvar', fam(binomial) link(logit)
 estimates store m1
 restore
 
 loc yv death
-glm `yv' `xvar', fam(binomial) link(logit) vce(cluster dp)
+glm `yv' `xvar', fam(binomial) link(logit)
 estimates store m2
 
-estout m1 m2 using glm_health.xls, cells(b(star fmt(3)) ci(fmt(3)) p(fmt(3))) transform(100*(exp(@)-1)) keep(Time Intervention tpostInt) starlevels(* 0.1 ** 0.05 *** 0.01) replace stats(N)
+estout m1 m2 using glm_health.xls, cells(b(star fmt(2)) ci(fmt(2)) p(fmt(2))) transform(100*(exp(@)-1)) keep(Time Intervention tpostInt) starlevels(* 0.1 ** 0.05 *** 0.01) replace stats(N)
+
+*----------------------------
+*estimate total savings: subtract the (fully adjusted) predicted cost from actual cost per case in the intervention period and sum them
+
+use patUse3, clear
+
+loc xvar Time Intervention tpostInt _Iseason* _IcmiD* _Isurgical* dx1 dx2 dx3 dx4 dx5 dx6 dx7 dx8 dx9 dx10 dx11 dx12 dx13 dx14 dx15 dx16 dx17 dx18 dx19 dx20 dx21 dx22 dx23 dx24 dx25 dx26 dx27 dx28 dx29 _Ifemale* _IAgeGroup* _IraceGroup* _Iins*
+
+* cost outcomes
+loc yv tvdc_cpi
+glm `yv' `xvar' if Intervention==0, fam(gamma) link(log)
+predict cost
+
+*graph the predicted vs observed costs just so we can visually see what the model is doing
+preserve
+collapse (mean) tvdc_cpi cost, by(ym surgical)
+
+lab var tvdc_cpi "Actual"
+lab var cost "Predicted"
+
+tw (line tvdc_cpi ym if surgical==1 ) (line cost ym if surgical==1, xline(651.5) tlab(2011m9(6)2017m12, angle(45)) title(Actual vs predicted total variable direct cost) subti(Surgery patients))
+graph export saving_surg1.eps, replace
+
+tw (line tvdc_cpi ym if surgical==0 ) (line cost ym if surgical==0, xline(651.5) tlab(2011m9(6)2017m12, angle(45)) title(Actual vs predicted total variable direct cost) subti(Medicine patients))
+graph export saving_surg0.eps, replace
+
+restore
+
+preserve
+collapse (mean) tvdc_cpi cost, by(ym)
+
+lab var tvdc_cpi "Actual"
+lab var cost "Predicted"
+
+tw (line tvdc_cpi ym ) (line cost ym, xline(651.5) tlab(2011m9(6)2017m12, angle(45)) title(Actual vs predicted total variable direct cost) subti(All patients))
+graph export saving.eps, replace
+restore
+
+preserve
+keep if Intervention==1
+gen diff = cost - tvdc_cpi
+egen tsaving = sum(diff)
+bys surgical: egen tsaving_surg = sum(diff)
+
+foreach v of varlist tsavi* {
+  replace `v' = `v' / 1000000
+}
+bys surgical: sum tsavi*
+
+foreach v of varlist cost tvdc_cpi {
+  egen t`v' = sum(`v')
+  bys surgical: egen t`v'_surg = sum(`v')
+  replace  t`v' =  t`v'/1000000
+  replace  t`v'_surg =  t`v'_surg/1000000
+}
+bys surgical: sum tsavi* tcost ttvdc_cpi tcost_surg ttvdc_cpi_surg
 
 
 *----------------------------
@@ -175,6 +203,9 @@ estout m1 m2 using glm_health.xls, cells(b(star fmt(3)) ci(fmt(3)) p(fmt(3))) tr
 
 use patUse3, clear
 
+xi i.ym i.season i.surgical i.female i.AgeGroup i.raceGroup i.ins i.cmiD
+
+tab ym
 sum ym
 loc min `r(min)'
 gen _Iym_`min' = ym==`min'
@@ -183,108 +214,85 @@ loc y tvdc_cpi
 capture destring `y', replace
 
 loc elix dx1 dx2 dx3 dx4 dx5 dx6 dx7 dx8 dx9 dx10 dx11 dx12 dx13 dx14 dx15 dx16 dx17 dx18 dx19 dx20 dx21 dx22 dx23 dx24 dx25 dx26 dx27 dx28 dx29
-loc sp _IcmiD* _Isurgical_2 `elix' _Ifemale_2 _IAgeGroup* _IraceGroup* _Iins*
+loc sp _IcmiD* _Isurgical* `elix' _Ifemale* _IAgeGroup* _IraceGroup* _Iins*
 
 *all patients
 *reg `y' _Iym* `sp', nocons
-glm `y' _Iym* `sp', family(gamma) link(log) search nocons
+glm `y' _Iym* `sp', family(gamma) link(log) nocons
 
-*save coefficients on month dummies & other risk adjusters
-matrix betas = e(b)
-local names: colnames betas
-local subset "_Iym*"
-unab subset : `subset'
-scalar LLL=wordcount("`subset'")
-loc colnum `= colsof(betas)'
+tempfile all
+parmest,format(estimate min95 max95 %8.4f p %8.3f) saving(`all', replace)
 
-* exp(coefficient on each monthly dummy) = (predicted y for the month)/exp(linear combination using the coefficients on all non-month dummy variables, i.e. risk adjusters)
+forval x=0/1 {
+  glm `y' _Iym* `sp' if surgical==`x', family(gamma) link(log) nocons
 
-*create a month variable and save coefficient on each month dummy in the corresponding month row
-preserve
-gen monthv = "_Iym_" + string(ym)
-gen ra_month = .
-foreach v of varlist _Iym* {
-  loc n colnumb(betas, "`v'")
-  replace ra_month = exp(betas[1,`n']) if monthv=="`v'"
-}
-keep ym ra_month
-duplicates drop
-tempfile racost_all
-save `racost_all'
-restore
-
-*surgical and medical patients separately
-destring surgical, replace
-loc sp _IcmiD* `elix' _Ifemale_2 _IAgeGroup* _IraceGroup* _Iins*
-forval k = 0/1 {
-  glm `y' _Iym* `sp' if surgical==`k', family(gamma) link(log) search nocons
-
-  *save coefficients on month dummies & other risk adjusters
-  matrix betas = e(b)
-  local names: colnames betas
-  local subset "_Iym*"
-  unab subset : `subset'
-  scalar LLL=wordcount("`subset'")
-  loc colnum `= colsof(betas)'
-
-  *create a month variable and save coefficient on each month dummy in the corresponding month row
-  preserve
-  gen monthv = "_Iym_" + string(ym)
-  gen ra_month = .
-  foreach v of varlist _Iym* {
-    loc n colnumb(betas, "`v'")
-    replace ra_month = exp(betas[1,`n']) if monthv=="`v'"
-  }
-  keep ym ra_month
-  duplicates drop
-  list
-  rename ra_month ra_month_surg`k'
-  tempfile racost_surgical`k'
-  save `racost_surgical`k''
-  restore
+  tempfile surg`x'
+  parmest,format(estimate min95 max95 %8.4f p %8.3f) saving(`surg`x'', replace)
 }
 
-use `racost_all', clear
-forval k = 0/1 {
-  merge 1:1 ym using `racost_surgical`k'', nogen
+use `all', clear
+gen gp = "all"
+foreach f in "surg0" "surg1" {
+  append using ``f''
+  replace gp = "`f'" if gp==""
 }
+assert gp!=""
+
+keep if regexm(parm, "_Iym")
+
+gen ym = substr(parm, -3,3)
+destring ym, replace
+format ym %tm
+
 *convert ym to dates
 gen date = dofm(ym)
 format date %d
 gen month=month(date)
 gen yr=year(date)
-compress
-outsheet using ra_tvdc_cpi_monthly.csv, comma names replace
 
+keep estimate gp date month yr
+rename estimate ra_month_
+reshape wide ra_month_, i(month yr date) j(gp) string
 
-/*mat risk_betas =betas[1,LLL+1..`colnum']
-mat score yhat=risk_betas if e(sample)
-gen exp_yhat = exp(yhat)
-
-foreach v of varlist _Iym_621 _Iym_622 {
-di "`v'"
-loc n colnumb(betas, "`v'")
-capture drop racost_`v'
-gen racost_`v' = exp(yhat)* ( exp(betas[1,`n']) - 1)
-}*/
-
-
-/*foreach y of varlist Pharmacy_cpi Laboratory_cpi Radiology_cpi  MRI_cpi Implants_cpi Blood_cpi ICU_cpi OR_cpi supplies_cpi inhalation_cpi POT_cpi postop_cpi routine_cpi {
-sum `y'
-}*/
-
-
-/*forval i=1/3 {
-scalar x = pr[6,`i']
-loc ub`i': di %9.3f x
-scalar x = pr[5,`i']
-loc lb`i': di %9.3f x
-
-loc ci`i' "(`lb`i'', `ub`i'')"
-di "`ci`i''"
+foreach v of varlist ra_month* {
+  replace `v' = exp(`v')
 }
 
-esttab
-outreg2 using Blood_cpi_me.xls, replace append nocons keep(Time Intervention tpostInt) label dec(3) addtext(95% CI for Time, "`ci1'", 95% CI for Intervention, "`ci2'", 95% CI for Time after Intervention, "`ci3'", Observations for first-part model, `e(N_logit)', Observations for second-part model, `e(N_glm)', First-part model log likelihood, `e(ll_logit)', Second-part model log likelihood, `e(ll_glm)', Second-part model AIC, `e(aic_glm)')
+format ra_month* %20.03fc
+compress
+outsheet using ra_tvdc_cpi_monthly_050918.csv, comma names replace
 
-*/
+*----------------------------
+* test for the difference in proportion
+
+egen race = group(raceGroup)
+forval x = 1/4 {
+    gen race`x' = race==`x'
+}
+
+
+gen insur = 1 if ins=="Commercial/Other ins"
+replace insur = 2 if ins=="Medicaid FFS" | ins=="Medicaid MC"
+replace insur = 3 if ins=="Medicare FFS" | ins=="Medicare MC"
+replace insur = 4 if ins=="Self-pay"
+assert insur!=.
+
+
+forval x = 1/4 {
+    gen insur`x' = insur==`x'
+}
+
+
+foreach v of varlist female race? insur? {
+  di "`v'--------------"
+  prtest `v', by(Int)
+  di ""
+}
+
+* test for the difference in means
+egen DXcount = rowtotal(dx1-dx29)
+foreach v of varlist DXcount {
+    di "`v'--------------"
+  ttest `v', by(Int)
+  di ""
+}

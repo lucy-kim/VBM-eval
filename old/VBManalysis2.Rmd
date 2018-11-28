@@ -38,7 +38,6 @@ library(ggplot2)
 library(dplyr)
 library(MASS)
 library(reshape2)
-library(scales)
 
 load("~/Box Sync/VBM/Data/vbmR/sample-full2017.RData")
 # load("~/Box Sync/VBM/Data/sample-full2017-raw.RData")
