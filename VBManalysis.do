@@ -1,6 +1,7 @@
 * estimate other models using cluster SE & two-part model
 
-cd ~/VBM
+cd
+cd "~/Box Sync/VBM/Data/"
 capture ssc install estout
 set seed 39103
 
@@ -40,8 +41,9 @@ lab var Time "Time"
 lab var Intervention "Intervention"
 
 compress
-saveold patUse3, replace
-
+// saveold patUse3, replace
+tempfile an
+save `an'
 *----------------------------
 *check if data correct monthly - yes
 /*preserve
@@ -81,7 +83,8 @@ eststo clear
 }*/
 *----------------------------
 *patient-level analysis: replicate the GLM estimation using R
-use patUse3, clear
+// use patUse3, clear
+use `an', clear
 
 loc xvar Time Intervention tpostInt _Iseason* _IcmiD* _Isurgical* dx1 dx2 dx3 dx4 dx5 dx6 dx7 dx8 dx9 dx10 dx11 dx12 dx13 dx14 dx15 dx16 dx17 dx18 dx19 dx20 dx21 dx22 dx23 dx24 dx25 dx26 dx27 dx28 dx29 _Ifemale* _IAgeGroup* _IraceGroup* _Iins*
 
@@ -94,7 +97,8 @@ estimates store m2
 glm `yv' `xvar' if surgical==1, fam(gamma) link(log)
 estimates store m3
 
-estout m1 m2 m3 using glm_cost.xls, cells(b(star fmt(2)) ci(fmt(2)) p(fmt(2))) transform(100*(exp(@)-1)) keep(Time Intervention tpostInt) starlevels(* 0.1 ** 0.05 *** 0.01) replace stats(N)
+loc saveDir "~/Dropbox/Research/VBM/results" 
+estout m1 m2 m3 using `saveDir'/glm_cost.xls, cells(b(star fmt(2)) ci(fmt(2)) p(fmt(2))) transform(100*(exp(@)-1)) keep(Time Intervention tpostInt) starlevels(* 0.1 ** 0.05 *** 0.01) replace stats(N)
 
 * LOS outcomes
 loc yv los

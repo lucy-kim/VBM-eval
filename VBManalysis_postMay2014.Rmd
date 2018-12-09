@@ -42,8 +42,10 @@ library(scales)
 library(plm)
 library(stringr)
 
+# if not building from scratch, use this already modified dataset
 load("~/Box Sync/VBM/Data/vbmR/sample-full2017-postMay2014.RData")
 
+# if builidng from scratch, start from here
 pat <- read_excel("~/Box Sync/VBM/Data/Patient Level Data with expense grouping deidentified 1052017.xlsx", guess_max=288364)
 pat2 <- read_excel("~/Box Sync/VBM/Data/Sep 2016 - Dec 2017 VBM Paper deintentified_Updated 5.14.18.xlsx", guess_max=94160)
 
@@ -593,7 +595,6 @@ for (col in costs_cpi) {
 }
 ```
 
-
 save as project
 ```{r}
 patUse3 <- subset(patUse2, DischargeDateMonth < "201209" | DischargeDateMonth > "201308")
@@ -668,6 +669,12 @@ t.test(CMI ~ int, data = patUse3) # t-test of mean difference
 dxvar <- paste0("dx",1:29)
 patUse3$DXcount <- rowSums(patUse3[dxvar], na.rm = TRUE)
 ddply(patUse3, .(int), summarize, mean = mean(DXcount), SD = sd(DXcount))
+
+# t-test difference in means between pre- and post-intervention Elixhauser counts
+test <- patUse3 %>%
+          # filter(int==0 | int==1) %>%
+          dplyr::select(int, DXcount)
+t.test(DXcount ~ int, data = test, var.equal = TRUE)
 
 table(patUse3$female, patUse3$int)
 table(patUse3$AgeGroup, patUse3$int)
@@ -2365,7 +2372,7 @@ old <- qcc.options()
 qcc.options("run.length"=8)
 
 # all patients
-pdf("~/Dropbox/Research/VBM/results/qcc_racost.pdf")
+png("~/Dropbox/Research/VBM/results/qcc_racost.png")
 my.xmr.x <- qcc(data =  qcc.groups(racost2$tvdc_cpi[racost2$int==0],
                                    racost2$DischargeDateMonth[racost2$int==0]),
                  newdata= qcc.groups(racost2$tvdc_cpi[racost2$int==1],
@@ -2373,15 +2380,15 @@ my.xmr.x <- qcc(data =  qcc.groups(racost2$tvdc_cpi[racost2$int==0],
                 title="All patients",
                 type = "xbar.one",
                 ylim=c(-15,15),
-                ylab="Percentage change (%) from pre-intervention mean",
-                xlab="Month",
+                ylab="% change (%) in direct variable costs per discharge*",
+                xlab="",
                 axes.las = 1,
-                # add.stats = F,
+                add.stats = F,
                 label.limits = c("","")) 
 dev.off()
 
 # surgical
-pdf("~/Dropbox/Research/VBM/results/qcc_racost_surg1.pdf")
+png("~/Dropbox/Research/VBM/results/qcc_racost_surg1.png")
 my.xmr.x <- qcc(data =  qcc.groups(racost2$tvdc_cpi_surg1[racost2$int==0],
                                    racost2$DischargeDateMonth[racost2$int==0]),
                  newdata= qcc.groups(racost2$tvdc_cpi_surg1[racost2$int==1],
@@ -2389,16 +2396,16 @@ my.xmr.x <- qcc(data =  qcc.groups(racost2$tvdc_cpi_surg1[racost2$int==0],
                 title="Surgical DRGs",
                 type = "xbar.one",
                 ylim=c(-15,15),
-                ylab="Percentage change (%) from pre-intervention mean",
-                xlab="Month",
+                ylab="% change (%) in direct variable costs per discharge*",
+                xlab="",
                 axes.las = 1,
-                # add.stats = F,
+                add.stats = F,
                 label.limits = c("","")
                 )
 dev.off()
 
 # medical
-pdf("~/Dropbox/Research/VBM/results/qcc_racost_surg0.pdf")
+png("~/Dropbox/Research/VBM/results/qcc_racost_surg0.png")
 my.xmr.x <- qcc(data =  qcc.groups(racost2$tvdc_cpi_surg0[racost2$int==0],
                                    racost2$DischargeDateMonth[racost2$int==0]),
                  newdata= qcc.groups(racost2$tvdc_cpi_surg0[racost2$int==1],
@@ -2406,10 +2413,10 @@ my.xmr.x <- qcc(data =  qcc.groups(racost2$tvdc_cpi_surg0[racost2$int==0],
                 title="Medical DRGs",
                 type = "xbar.one",
                 ylim=c(-15,15),
-                ylab="Percentage change (%)",
-                xlab="Month",
+                ylab="% change (%) in direct variable costs per discharge*",
+                xlab="",
                 axes.las = 1,
-                # add.stats = F,
+                add.stats = F,
                 label.limits = c("","")
                 )
 dev.off()
