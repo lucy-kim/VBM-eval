@@ -4,6 +4,7 @@ cd
 cd "~/Box Sync/VBM/Data/"
 capture ssc install estout
 set seed 39103
+loc saveDir "~/Dropbox/Research/VBM/results"
 
 insheet using patUse3.csv, comma nonames clear
 replace v48 = "dept" if v48=="NYU Reporting Department â€“ Most Recent_Desc" & _n==1
@@ -97,7 +98,6 @@ estimates store m2
 glm `yv' `xvar' if surgical==1, fam(gamma) link(log)
 estimates store m3
 
-loc saveDir "~/Dropbox/Research/VBM/results" 
 estout m1 m2 m3 using `saveDir'/glm_cost.xls, cells(b(star fmt(2)) ci(fmt(2)) p(fmt(2))) transform(100*(exp(@)-1)) keep(Time Intervention tpostInt) starlevels(* 0.1 ** 0.05 *** 0.01) replace stats(N)
 
 * LOS outcomes
@@ -205,7 +205,7 @@ bys surgical: sum tsavi* tcost ttvdc_cpi tcost_surg ttvdc_cpi_surg
 *----------------------------
 *for aggregate ITS, create Monthly total costs after adjusting for the patient characteristics using coefficient on month dummies
 
-use patUse3, clear
+use `an', clear
 
 xi i.ym i.season i.surgical i.female i.AgeGroup i.raceGroup i.ins i.cmiD
 
@@ -266,6 +266,68 @@ format ra_month* %20.03fc
 compress
 outsheet using ra_tvdc_cpi_monthly_050918.csv, comma names replace
 
+*----------------------------
+*create unadjusted monthly costs
+
+use `an', clear
+
+xi i.ym
+
+tab ym
+sum ym
+loc min `r(min)'
+gen _Iym_`min' = ym==`min'
+
+loc y tvdc_cpi
+capture destring `y', replace
+loc sp
+
+*all patients
+*reg `y' _Iym* `sp', nocons
+glm `y' _Iym* `sp', family(gamma) link(log) nocons
+
+tempfile all
+parmest,format(estimate min95 max95 %8.4f p %8.3f) saving(`all', replace)
+
+forval x=0/1 {
+  glm `y' _Iym* `sp' if surgical==`x', family(gamma) link(log) nocons
+
+  tempfile surg`x'
+  parmest,format(estimate min95 max95 %8.4f p %8.3f) saving(`surg`x'', replace)
+}
+
+use `all', clear
+gen gp = "all"
+foreach f in "surg0" "surg1" {
+  append using ``f''
+  replace gp = "`f'" if gp==""
+}
+assert gp!=""
+
+keep if regexm(parm, "_Iym")
+
+gen ym = substr(parm, -3,3)
+destring ym, replace
+format ym %tm
+
+*convert ym to dates
+gen date = dofm(ym)
+format date %d
+gen month=month(date)
+gen yr=year(date)
+
+keep estimate gp date month yr
+rename estimate unadj_month_
+reshape wide unadj_month_, i(month yr date) j(gp) string
+
+foreach v of varlist unadj_month* {
+  replace `v' = exp(`v')
+}
+
+format unadj_month* %20.03fc
+compress
+
+outsheet using "~/Dropbox/Research/VBM/data/unadj_tvdc_cpi_monthly_050918.csv", comma names replace
 *----------------------------
 * test for the difference in proportion
 

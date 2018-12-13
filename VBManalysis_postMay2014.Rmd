@@ -798,7 +798,7 @@ ggplot(test) +
 ggsave("~/Dropbox/Research/VBM/results/num_discharges_bymedsurg.png", width=20, height=10, units="cm")
 ```
 
-### plot the mean cost & CMI trajectory 
+### plot the mean cost & CMI trajectory for Figure 1
 
 All patients
 ```{r}
@@ -807,23 +807,71 @@ costs_lab <- c("Total variable direct")
 costs_cpi <- paste(costs, "_cpi", sep="")
 costs_cpi_cmi <- paste(costs_cpi, "_cmi", sep="")
 
-# compute growth rate 
+# compute growth rate of DRG weight-adjusted costs
 ddply(patUse2[patUse2$DischargeDateMonth < "201209" | patUse2$DischargeDateMonth > "201308",], .(int), summarise, m=mean(tvdc_cpi_cmi, na.rm=TRUE))
 # mean cost in pre =5262.270
 patUse2$gr <- 100*(patUse2$tvdc_cpi_cmi - 5262.270)/5262.270
- 
-keep <- c(costs, costs_cpi, costs_cpi_cmi, "gr", "DischargeDateMonth", "CMI")
+
+# compute growth rate of unadjusted costs
+ddply(patUse2[patUse2$DischargeDateMonth < "201209" | patUse2$DischargeDateMonth > "201308",], .(int), summarise, m=mean(tvdc_cpi, na.rm=TRUE))
+# mean cost in pre =9326.520
+patUse2$gr_unadj <- 100*(patUse2$tvdc_cpi - 9326.520)/9326.520
+
+keep <- c(costs, costs_cpi, costs_cpi_cmi, "gr", "gr_unadj", "DischargeDateMonth", "CMI")
 test3 <- ddply(patUse2[keep], .(DischargeDateMonth), numcolwise(mean, na.rm=TRUE))
 
-for (col in c(costs, costs_cpi, costs_cpi_cmi,"gr", "CMI")) {
+for (col in c(costs, costs_cpi, costs_cpi_cmi,"gr","gr_unadj", "CMI")) {
   test3[test3$DischargeDateMonth >= "201209" & test3$DischargeDateMonth <= "201308", col] <- NA
 }
 
 # line graphs: build up and show raw, just inflation adjusted, and CMI & inflation adjusted
 library(reshape2)
-test <- melt(test3[c("gr","tvdc", "tvdc_cpi", "tvdc_cpi_cmi", "DischargeDateMonth")], id.var="DischargeDateMonth")
-test$variable <- factor(test$variable, labels = c("Growth","Raw", "Inflation-adjusted", "Inflation and DRG weight-adjusted"))
+test <- melt(test3[c("gr","gr_unadj","tvdc", "tvdc_cpi", "tvdc_cpi_cmi", "DischargeDateMonth")], id.var="DischargeDateMonth")
+test$variable <- factor(test$variable, labels = c("Growth","Growth, unadjusted","Raw", "Inflation-adjusted", "Inflation and DRG weight-adjusted"))
 
+# % change in costs using DRG-weight adjusted cost - for Figure 1 in paper
+test2 <- subset(test, variable=="Growth")
+test2$int <- ifelse(test2$DischargeDateMonth >= "201405",1,0)
+ 
+ggplot(test2, aes(x=DischargeDateMonth, y=value, group=variable)) +
+  geom_line() +
+  geom_point() +
+  theme_bw(base_size=13) +
+  labs(x="Month", y="Percentage change (%)") +
+       # title="Mean Total Variable Direct Cost per Discharge by Month",
+       # subtitle="All patients") +
+       # caption="Notes. May 2014 - August 2014 is the transition period.") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position="bottom", legend.title=element_blank()) +
+  geom_vline(aes(xintercept=32), colour="black", linetype='dashed') +
+  scale_y_continuous(limits = c(-20,20),
+                     breaks=seq(-20,20,10)) +
+    scale_x_discrete(breaks=c("201109","201201","201205","201209","201301","201305","201309","201401","201405","201409","201501","201505","201509","201601","201605","201609","201701","201705","201709"))
+ggsave("~/Dropbox/Research/VBM/results/tvdc_cpi_cmi_gr_trajectory.tiff", width=20, height=10, units="cm")
+
+# % change in costs using unadjusted cost 
+test2 <- subset(test, variable=="Growth, unadjusted")
+test2$int <- ifelse(test2$DischargeDateMonth >= "201405",1,0)
+ 
+ggplot(test2, aes(x=DischargeDateMonth, y=value, group=variable)) +
+  geom_line() +
+  geom_point() +
+  theme_bw(base_size=13) +
+  labs(x="Month", y="Percentage change (%)") +
+       # title="Mean Total Variable Direct Cost per Discharge by Month",
+       # subtitle="All patients") +
+       # caption="Notes. May 2014 - August 2014 is the transition period.") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position="bottom", legend.title=element_blank()) +
+  geom_vline(aes(xintercept=32), colour="black", linetype='dashed') +
+  scale_y_continuous(limits = c(-20,20),
+                     breaks=seq(-20,20,10)) +
+    scale_x_discrete(breaks=c("201109","201201","201205","201209","201301","201305","201309","201401","201405","201409","201501","201505","201509","201601","201605","201609","201701","201705","201709"))
+ggsave("~/Dropbox/Research/VBM/results/tvdc_cpi_gr_trajectory.tiff", width=20, height=10, units="cm")
+```
+
+additional plots using actual dollar amount as a scale
+```{r}
 # all 3 costs together
 ggplot(test[tset$variable!="Growth",], aes(x=DischargeDateMonth, y=value, colour=variable, group=variable)) +
   theme_bw(base_size=13) +
@@ -859,27 +907,6 @@ ggplot(test[test$variable=="Inflation and DRG weight-adjusted",], aes(x=Discharg
                      breaks=seq(0,6100,1000)) +
     scale_x_discrete(breaks=c("201109","201201","201205","201209","201301","201305","201309","201401","201405","201409","201501","201505","201509","201601","201605","201609","201701","201705","201709"))
 ggsave("~/Dropbox/Research/VBM/results/tvdc_cpi_cmi_trajectory.pdf", width=20, height=10, units="cm")
-
-
-# % change in costs 
-test2 <- subset(test, variable=="Growth")
-test2$int <- ifelse(test2$DischargeDateMonth >= "201405",1,0)
- 
-ggplot(test2, aes(x=DischargeDateMonth, y=value, group=variable)) +
-  geom_line() +
-  geom_point() +
-  theme_bw(base_size=13) +
-  labs(x="Month", y="Percentage change (%)") +
-       # title="Mean Total Variable Direct Cost per Discharge by Month",
-       # subtitle="All patients") +
-       # caption="Notes. May 2014 - August 2014 is the transition period.") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.position="bottom", legend.title=element_blank()) +
-  geom_vline(aes(xintercept=32), colour="black", linetype='dashed') +
-  scale_y_continuous(limits = c(-20,20),
-                     breaks=seq(-20,20,10)) +
-    scale_x_discrete(breaks=c("201109","201201","201205","201209","201301","201305","201309","201401","201405","201409","201501","201505","201509","201601","201605","201609","201701","201705","201709"))
-ggsave("~/Dropbox/Research/VBM/results/tvdc_cpi_cmi_gr_trajectory.tiff", width=20, height=10, units="cm")
 ```
 
 plot separately by patient type
@@ -2344,7 +2371,51 @@ for (col in y) {
 }
 ```
 
-# SPC of risk-adjsuted total costs (estimated from running the patient-level analysis) - used for paper
+# SPC of risk-adjsuted total costs (estimated from running the patient-level analysis) - used for paper as Figure 2
+
+## Risk-adjusted monthly costs
+```{r}
+# import risk-adjusted total costs, which are month fixed effect coefficientss estimated with patient characteristics controls using the discharge-level data in Stata (VBManalysis.do)
+racost <- read.csv("~/Dropbox/Research/VBM/data/ra_tvdc_cpi_monthly_050918.csv")
+library(zoo)
+racost$tt <- as.yearmon(paste(racost$yr, racost$month, sep = "-"))
+racost$DischargeDateMonth <- format(racost$tt, "%Y%m")
+
+colnames(racost)[which(colnames(racost)=="ra_month_all")] <- "tvdc_cpi"
+colnames(racost)[which(colnames(racost)=="ra_month_surg0")] <- "tvdc_cpi_surg0"
+colnames(racost)[which(colnames(racost)=="ra_month_surg1")] <- "tvdc_cpi_surg1"
+racost <- racost[c("tvdc_cpi", "tvdc_cpi_surg1", "tvdc_cpi_surg0", "DischargeDateMonth")]
+
+# add in FY 13
+allDates <- as.data.frame(sort(unique(patUse$DischargeDateMonth)))
+names(allDates) <- "DischargeDateMonth"
+
+lastpremonthidx <- 32
+nmonths <- length(allDates$DischargeDateMonth)
+
+allDates$int <- c(rep(0, lastpremonthidx), rep(1, nmonths-lastpremonthidx))
+allDates$t <- 1:nmonths
+
+# aggregate data
+racost <- merge(racost, allDates, by="DischargeDateMonth", all.y=TRUE)
+
+# create % change from the pre-intervention mean
+ddply(racost, .(int), summarise, Mall = mean(tvdc_cpi, na.rm=TRUE), Msurg0 = mean(tvdc_cpi_surg0, na.rm=TRUE), Msurg1 = mean(tvdc_cpi_surg1, na.rm=TRUE))
+#   int     Mall   Msurg0   Msurg1
+# 1   0 2809.575 2626.095 34150.72
+
+racost$pch <- 100*(racost$tvdc_cpi - 2809.575)/2809.575
+racost$pch_surg0 <- 100*(racost$tvdc_cpi_surg0 - 2626.095)/2626.095
+racost$pch_surg1 <- 100*(racost$tvdc_cpi_surg1 - 34150.72)/34150.72
+
+# time-series data
+aggData.ts <- ts(racost, start=c(2011,9), end=c(2017,12), frequency = 12)
+summary(aggData.ts)
+
+plot(aggData.ts[,c("tvdc_cpi")], ylim=c(0,10000) ) # plot avg total variable direct cost
+```
+
+SPC for Fig 2
 ```{r}
 library(qcc)
 # to implement own version: http://blog.yhat.com/posts/quality-control-in-r.html
@@ -2410,6 +2481,126 @@ my.xmr.x <- qcc(data =  qcc.groups(racost2$tvdc_cpi_surg0[racost2$int==0],
                                    racost2$DischargeDateMonth[racost2$int==0]),
                  newdata= qcc.groups(racost2$tvdc_cpi_surg0[racost2$int==1],
                                      racost2$DischargeDateMonth[racost2$int==1]),
+                title="Medical DRGs",
+                type = "xbar.one",
+                ylim=c(-15,15),
+                ylab="% change (%) in direct variable costs per discharge*",
+                xlab="",
+                axes.las = 1,
+                add.stats = F,
+                label.limits = c("","")
+                )
+dev.off()
+```
+
+## Unadjusted monthly costs
+```{r}
+# import unadjusted total costs, which are month fixed effect coefficientss estimated with patient characteristics controls using the discharge-level data in Stata (VBManalysis.do)
+unadj_cost <- read.csv("~/Dropbox/Research/VBM/data/unadj_tvdc_cpi_monthly_050918.csv")
+library(zoo)
+unadj_cost$tt <- as.yearmon(paste(unadj_cost$yr, unadj_cost$month, sep = "-"))
+unadj_cost$DischargeDateMonth <- format(unadj_cost$tt, "%Y%m")
+
+colnames(unadj_cost)[which(colnames(unadj_cost)=="unadj_month_all")] <- "tvdc_cpi"
+colnames(unadj_cost)[which(colnames(unadj_cost)=="unadj_month_surg0")] <- "tvdc_cpi_surg0"
+colnames(unadj_cost)[which(colnames(unadj_cost)=="unadj_month_surg1")] <- "tvdc_cpi_surg1"
+unadj_cost <- unadj_cost[c("tvdc_cpi", "tvdc_cpi_surg1", "tvdc_cpi_surg0", "DischargeDateMonth")]
+
+# add in FY 13
+allDates <- as.data.frame(sort(unique(patUse$DischargeDateMonth)))
+names(allDates) <- "DischargeDateMonth"
+
+lastpremonthidx <- 32
+nmonths <- length(allDates$DischargeDateMonth)
+
+allDates$int <- c(rep(0, lastpremonthidx), rep(1, nmonths-lastpremonthidx))
+allDates$t <- 1:nmonths
+
+# aggregate data
+unadj_cost <- merge(unadj_cost, allDates, by="DischargeDateMonth", all.y=TRUE)
+
+# create % change from the pre-intervention mean
+ddply(unadj_cost, .(int), summarise, Mall = mean(tvdc_cpi, na.rm=TRUE), Msurg0 = mean(tvdc_cpi_surg0, na.rm=TRUE), Msurg1 = mean(tvdc_cpi_surg1, na.rm=TRUE))
+#   int     Mall   Msurg0   Msurg1
+# 1   0 2809.575 2626.095 34150.72
+
+unadj_cost$pch <- 100*(unadj_cost$tvdc_cpi - 2809.575)/2809.575
+unadj_cost$pch_surg0 <- 100*(unadj_cost$tvdc_cpi_surg0 - 2626.095)/2626.095
+unadj_cost$pch_surg1 <- 100*(unadj_cost$tvdc_cpi_surg1 - 34150.72)/34150.72
+
+# time-series data
+aggData.ts <- ts(unadj_cost, start=c(2011,9), end=c(2017,12), frequency = 12)
+summary(aggData.ts)
+
+plot(aggData.ts[,c("tvdc_cpi")], ylim=c(0,10000) ) # plot avg total variable direct cost
+```
+
+SPC for Fig 2 using unadjusted costs
+```{r}
+library(qcc)
+# to implement own version: http://blog.yhat.com/posts/quality-control-in-r.html
+
+unadj_cost2 <- subset(unadj_cost, (DischargeDateMonth < "201209" | DischargeDateMonth > "201308"))
+
+names(unadj_cost2$DischargeDateMonth) <- unadj_cost2$DischargeDateMonth
+
+# normalize the cost by substracting the mean cost and dividing by the SD of the cost during the pre-period (2011/09 - 2012/04) 
+monthly_cost <- ddply(unadj_cost2, .(int), summarise, tvdc_cpiM=mean(tvdc_cpi, na.rm=TRUE), tvdc_cpi_surg0M=mean(tvdc_cpi_surg0, na.rm=TRUE), tvdc_cpi_surg1M=mean(tvdc_cpi_surg1, na.rm=TRUE))
+# mean cost in pre
+# all patients = 9334.434
+# med = 5680.629
+# surg = 15233.99
+
+# plot % change for all patients
+unadj_cost2$tvdc_cpi <-  100*(unadj_cost2$tvdc_cpi - 9334.434)/9334.434
+unadj_cost2$tvdc_cpi_surg0 <-  100*(unadj_cost2$tvdc_cpi_surg0 - 5680.629)/5680.629
+unadj_cost2$tvdc_cpi_surg1 <-  100*(unadj_cost2$tvdc_cpi_surg1 - 15233.99)/15233.99
+
+names(unadj_cost2$DischargeDateMonth) <- unadj_cost2$DischargeDateMonth
+
+# mark dots in yellow = run of at least 8 consecutive observations above/below the mean
+old <- qcc.options()
+qcc.options("run.length"=8)
+
+# all patients
+png("~/Dropbox/Research/VBM/results/qcc_unadj_cost.png")
+my.xmr.x <- qcc(data =  qcc.groups(unadj_cost2$tvdc_cpi[unadj_cost2$int==0],
+                                   unadj_cost2$DischargeDateMonth[unadj_cost2$int==0]),
+                 newdata= qcc.groups(unadj_cost2$tvdc_cpi[unadj_cost2$int==1],
+                                     unadj_cost2$DischargeDateMonth[unadj_cost2$int==1]),
+                title="All patients",
+                type = "xbar.one",
+                ylim=c(-15,15),
+                ylab="% change (%) in direct variable costs per discharge*",
+                xlab="",
+                axes.las = 1,
+                add.stats = F,
+                label.limits = c("","")) 
+dev.off()
+
+# surgical
+png("~/Dropbox/Research/VBM/results/qcc_unadj_cost_surg1.png")
+my.xmr.x <- qcc(data =  qcc.groups(unadj_cost2$tvdc_cpi_surg1[unadj_cost2$int==0],
+                                   unadj_cost2$DischargeDateMonth[unadj_cost2$int==0]),
+                 newdata= qcc.groups(unadj_cost2$tvdc_cpi_surg1[unadj_cost2$int==1],
+                                     unadj_cost2$DischargeDateMonth[unadj_cost2$int==1]),
+                title="Surgical DRGs",
+                type = "xbar.one",
+                ylim=c(-15,15),
+                ylab="% change (%) in direct variable costs per discharge*",
+                xlab="",
+                axes.las = 1,
+                add.stats = F,
+                label.limits = c("","")
+                )
+dev.off()
+
+# medical
+png("~/Dropbox/Research/VBM/results/qcc_unadj_cost_surg0.png")
+my.xmr.x <- qcc(data =  qcc.groups(unadj_cost2$tvdc_cpi_surg0[unadj_cost2$int==0],
+                                   unadj_cost2$DischargeDateMonth[unadj_cost2$int==0]),
+                 newdata= qcc.groups(unadj_cost2$tvdc_cpi_surg0[unadj_cost2$int==1],
+                                     unadj_cost2$DischargeDateMonth[unadj_cost2$int==1]),
                 title="Medical DRGs",
                 type = "xbar.one",
                 ylim=c(-15,15),
