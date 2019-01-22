@@ -9,6 +9,9 @@ Run this main code in *R* :
 This code requires the following two steps to complete the whole analyses. They were run in _SAS_ and _Stata_, respectively.
 
 ### 1. Construct the elixhauser comorbidity index
+
+All the code files below are contained in the directory `Elixhauser-score`.
+
 1. Import CSV file into SAS
   - `crpat_elix.sas`
 2. ICD-10 to Elixhauser: Use [Version 2016.2](https://www.hcup-us.ahrq.gov/toolssoftware/comorbidityicd10/comorbidity_icd10.jsp)
