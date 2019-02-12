@@ -31,7 +31,6 @@ library(lme4)
 library(Hmisc)
 library(plyr)
 library(doBy)
-library(clusterSEs)
 library(censReg)
 library(qcc)
 library(ggplot2)
@@ -1876,12 +1875,12 @@ test <- merge(patUse3, monthly_cost, by="int")
 # plot % change for all patients
 test$tvdc_cpi_cmi_gr <-  100*(test$tvdc_cpi_cmi - 5262.270)/5262.270
 
-# pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmi_gr.pdf")
-my.xmr.x <- qcc(data =  qcc.groups(test$tvdc_cpi_cmi_gr[test$int==0],
+pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmi_gr.pdf")
+fig_2a <- qcc(data =  qcc.groups(test$tvdc_cpi_cmi_gr[test$int==0],
                                    test$DischargeDateMonth[test$int==0]),
                  newdata= qcc.groups(test$tvdc_cpi_cmi_gr[test$int==1],
                                      test$DischargeDateMonth[test$int==1]),
-                title="All patients",
+                title="(a) All patients",
                 type = "xbar",
                 ylim=c(-20,20),
                 ylab="Percentage change (%)",
@@ -1890,7 +1889,6 @@ my.xmr.x <- qcc(data =  qcc.groups(test$tvdc_cpi_cmi_gr[test$int==0],
                 add.stats = F,
                 label.limits = c("","")
                 )
-dev.off()
 
 ddply(patUse3, .(int, surgical), summarise, tvdc_cpi_cmim=mean(tvdc_cpi_cmi, na.rm=TRUE), tvdc_cpi_cmisd=sd(tvdc_cpi_cmi, na.rm=TRUE))
 # medical: mean cost in pre =5125.333
@@ -1899,13 +1897,13 @@ ddply(patUse3, .(int, surgical), summarise, tvdc_cpi_cmim=mean(tvdc_cpi_cmi, na.
 # plot % change for medical patients
 test$tvdc_cpi_cmi_gr <- ifelse(test$pattype=="Surgical", 100*(test$tvdc_cpi_cmi - 5481.823)/5481.823, 100*(test$tvdc_cpi_cmi - 5125.333)/5125.333)
 
-# surgical
-pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmi_gr_surg.pdf")
-my.xmr.x <- qcc(data =  qcc.groups(test$tvdc_cpi_cmi_gr[test$int==0 & test$pattype=="Surgical"],
-                                   test$DischargeDateMonth[test$int==0 & test$pattype=="Surgical"]),
-                 newdata= qcc.groups(test$tvdc_cpi_cmi_gr[test$int==1 & test$pattype=="Surgical"],
-                                     test$DischargeDateMonth[test$int==1 & test$pattype=="Surgical"]),
-                title="Surgical patients",
+# medical
+pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmi_gr_med.pdf")
+fig_2b <- qcc(data =  qcc.groups(test$tvdc_cpi_cmi_gr[test$int==0 & test$pattype=="Medical"],
+                                   test$DischargeDateMonth[test$int==0 & test$pattype=="Medical"]),
+                 newdata= qcc.groups(test$tvdc_cpi_cmi_gr[test$int==1 & test$pattype=="Medical"],
+                                     test$DischargeDateMonth[test$int==1 & test$pattype=="Medical"]),
+                title="(b) Medical patients",
                 type = "xbar",
                 ylim=c(-20,20),
                 ylab="Percentage change (%)",
@@ -1916,13 +1914,13 @@ my.xmr.x <- qcc(data =  qcc.groups(test$tvdc_cpi_cmi_gr[test$int==0 & test$patty
                 )
 dev.off()
 
-# medical
-pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmi_gr_med.pdf")
-my.xmr.x <- qcc(data =  qcc.groups(test$tvdc_cpi_cmi_gr[test$int==0 & test$pattype=="Medical"],
-                                   test$DischargeDateMonth[test$int==0 & test$pattype=="Medical"]),
-                 newdata= qcc.groups(test$tvdc_cpi_cmi_gr[test$int==1 & test$pattype=="Medical"],
-                                     test$DischargeDateMonth[test$int==1 & test$pattype=="Medical"]),
-                title="Medical patients",
+# surgical
+pdf("~/Dropbox/Research/VBM/results/qcc_tvdc_cpi_cmi_gr_surg.pdf")
+fig_2c <- qcc(data =  qcc.groups(test$tvdc_cpi_cmi_gr[test$int==0 & test$pattype=="Surgical"],
+                                   test$DischargeDateMonth[test$int==0 & test$pattype=="Surgical"]),
+                 newdata= qcc.groups(test$tvdc_cpi_cmi_gr[test$int==1 & test$pattype=="Surgical"],
+                                     test$DischargeDateMonth[test$int==1 & test$pattype=="Surgical"]),
+                title="(c) Surgical patients",
                 type = "xbar",
                 ylim=c(-20,20),
                 ylab="Percentage change (%)",
@@ -2441,14 +2439,15 @@ names(racost2$DischargeDateMonth) <- racost2$DischargeDateMonth
 # mark dots in yellow = run of at least 8 consecutive observations above/below the mean
 old <- qcc.options()
 qcc.options("run.length"=8)
+qcc.options("cex"=1.65)
 
 # all patients
-png("~/Dropbox/Research/VBM/results/qcc_racost.png")
-my.xmr.x <- qcc(data =  qcc.groups(racost2$tvdc_cpi[racost2$int==0],
+pdf("~/Dropbox/Research/VBM/results/qcc_racost.pdf")
+fig_2a <- qcc(data =  qcc.groups(racost2$tvdc_cpi[racost2$int==0],
                                    racost2$DischargeDateMonth[racost2$int==0]),
                  newdata= qcc.groups(racost2$tvdc_cpi[racost2$int==1],
                                      racost2$DischargeDateMonth[racost2$int==1]),
-                title="All patients",
+                title="(a) All patients",
                 type = "xbar.one",
                 ylim=c(-15,15),
                 ylab="% change (%) in direct variable costs per discharge*",
@@ -2458,13 +2457,13 @@ my.xmr.x <- qcc(data =  qcc.groups(racost2$tvdc_cpi[racost2$int==0],
                 label.limits = c("","")) 
 dev.off()
 
-# surgical
-png("~/Dropbox/Research/VBM/results/qcc_racost_surg1.png")
-my.xmr.x <- qcc(data =  qcc.groups(racost2$tvdc_cpi_surg1[racost2$int==0],
+# medical
+pdf("~/Dropbox/Research/VBM/results/qcc_racost_surg0.pdf")
+fig_2b <- qcc(data =  qcc.groups(racost2$tvdc_cpi_surg0[racost2$int==0],
                                    racost2$DischargeDateMonth[racost2$int==0]),
-                 newdata= qcc.groups(racost2$tvdc_cpi_surg1[racost2$int==1],
+                 newdata= qcc.groups(racost2$tvdc_cpi_surg0[racost2$int==1],
                                      racost2$DischargeDateMonth[racost2$int==1]),
-                title="Surgical DRGs",
+                title="(b) Medical DRGs",
                 type = "xbar.one",
                 ylim=c(-15,15),
                 ylab="% change (%) in direct variable costs per discharge*",
@@ -2475,13 +2474,13 @@ my.xmr.x <- qcc(data =  qcc.groups(racost2$tvdc_cpi_surg1[racost2$int==0],
                 )
 dev.off()
 
-# medical
-png("~/Dropbox/Research/VBM/results/qcc_racost_surg0.png")
-my.xmr.x <- qcc(data =  qcc.groups(racost2$tvdc_cpi_surg0[racost2$int==0],
+# surgical
+pdf("~/Dropbox/Research/VBM/results/qcc_racost_surg1.pdf")
+fig_2c <- qcc(data =  qcc.groups(racost2$tvdc_cpi_surg1[racost2$int==0],
                                    racost2$DischargeDateMonth[racost2$int==0]),
-                 newdata= qcc.groups(racost2$tvdc_cpi_surg0[racost2$int==1],
+                 newdata= qcc.groups(racost2$tvdc_cpi_surg1[racost2$int==1],
                                      racost2$DischargeDateMonth[racost2$int==1]),
-                title="Medical DRGs",
+                title="(c) Surgical DRGs",
                 type = "xbar.one",
                 ylim=c(-15,15),
                 ylab="% change (%) in direct variable costs per discharge*",
@@ -2561,16 +2560,17 @@ names(unadj_cost2$DischargeDateMonth) <- unadj_cost2$DischargeDateMonth
 # mark dots in yellow = run of at least 8 consecutive observations above/below the mean
 old <- qcc.options()
 qcc.options("run.length"=8)
+qcc.options("cex"=1.65)
 
 # all patients
-png("~/Dropbox/Research/VBM/results/qcc_unadj_cost.png")
+pdf("~/Dropbox/Research/VBM/results/qcc_unadj_cost.pdf")
 my.xmr.x <- qcc(data =  qcc.groups(unadj_cost2$tvdc_cpi[unadj_cost2$int==0],
                                    unadj_cost2$DischargeDateMonth[unadj_cost2$int==0]),
                  newdata= qcc.groups(unadj_cost2$tvdc_cpi[unadj_cost2$int==1],
                                      unadj_cost2$DischargeDateMonth[unadj_cost2$int==1]),
-                title="All patients",
+                title="(a) All patients",
                 type = "xbar.one",
-                ylim=c(-15,15),
+                ylim=c(-15,20),
                 ylab="% change (%) in direct variable costs per discharge*",
                 xlab="",
                 axes.las = 1,
@@ -2578,15 +2578,15 @@ my.xmr.x <- qcc(data =  qcc.groups(unadj_cost2$tvdc_cpi[unadj_cost2$int==0],
                 label.limits = c("","")) 
 dev.off()
 
-# surgical
-png("~/Dropbox/Research/VBM/results/qcc_unadj_cost_surg1.png")
-my.xmr.x <- qcc(data =  qcc.groups(unadj_cost2$tvdc_cpi_surg1[unadj_cost2$int==0],
+# medical
+pdf("~/Dropbox/Research/VBM/results/qcc_unadj_cost_surg0.pdf")
+my.xmr.x <- qcc(data =  qcc.groups(unadj_cost2$tvdc_cpi_surg0[unadj_cost2$int==0],
                                    unadj_cost2$DischargeDateMonth[unadj_cost2$int==0]),
-                 newdata= qcc.groups(unadj_cost2$tvdc_cpi_surg1[unadj_cost2$int==1],
+                 newdata= qcc.groups(unadj_cost2$tvdc_cpi_surg0[unadj_cost2$int==1],
                                      unadj_cost2$DischargeDateMonth[unadj_cost2$int==1]),
-                title="Surgical DRGs",
+                title="(b) Medical DRGs",
                 type = "xbar.one",
-                ylim=c(-15,15),
+                ylim=c(-15,20),
                 ylab="% change (%) in direct variable costs per discharge*",
                 xlab="",
                 axes.las = 1,
@@ -2595,15 +2595,15 @@ my.xmr.x <- qcc(data =  qcc.groups(unadj_cost2$tvdc_cpi_surg1[unadj_cost2$int==0
                 )
 dev.off()
 
-# medical
-png("~/Dropbox/Research/VBM/results/qcc_unadj_cost_surg0.png")
-my.xmr.x <- qcc(data =  qcc.groups(unadj_cost2$tvdc_cpi_surg0[unadj_cost2$int==0],
+# surgical
+pdf("~/Dropbox/Research/VBM/results/qcc_unadj_cost_surg1.pdf")
+my.xmr.x <- qcc(data =  qcc.groups(unadj_cost2$tvdc_cpi_surg1[unadj_cost2$int==0],
                                    unadj_cost2$DischargeDateMonth[unadj_cost2$int==0]),
-                 newdata= qcc.groups(unadj_cost2$tvdc_cpi_surg0[unadj_cost2$int==1],
+                 newdata= qcc.groups(unadj_cost2$tvdc_cpi_surg1[unadj_cost2$int==1],
                                      unadj_cost2$DischargeDateMonth[unadj_cost2$int==1]),
-                title="Medical DRGs",
+                title="(c) Surgical DRGs",
                 type = "xbar.one",
-                ylim=c(-15,15),
+                ylim=c(-15,20),
                 ylab="% change (%) in direct variable costs per discharge*",
                 xlab="",
                 axes.las = 1,
