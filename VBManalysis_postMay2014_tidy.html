@@ -244,21 +244,21 @@ pat2 &lt;- pat2 %&gt;%
 <p>Check the date ranges in each dataset</p>
 <pre class="r"><code>NROW(pat)</code></pre>
 <pre><code>## [1] 288364</code></pre>
-<pre class="r"><code>pat$AdmitDateD   &lt;- as.Date( pat$`Admit_Date` )
-pat$DischargeDateD   &lt;- as.Date( pat$`Discharge_Date` )
+<pre class="r"><code>pat$AdmitDateD &lt;- as.Date(pat$`Admit_Date`)
+pat$DischargeDateD &lt;- as.Date(pat$`Discharge_Date`)
 
-min(pat$DischargeDateD ) # &quot;2010-09-01&quot;</code></pre>
+min(pat$DischargeDateD) # '2010-09-01'</code></pre>
 <pre><code>## [1] &quot;2010-09-01&quot;</code></pre>
-<pre class="r"><code>max(pat$DischargeDateD ) #  &quot;2017-05-31&quot;</code></pre>
+<pre class="r"><code>max(pat$DischargeDateD) # '2017-05-31'</code></pre>
 <pre><code>## [1] &quot;2017-05-31&quot;</code></pre>
 <pre class="r"><code>NROW(pat2)</code></pre>
 <pre><code>## [1] 94160</code></pre>
-<pre class="r"><code>pat2$AdmitDateD   &lt;- as.Date( pat2$`Admit_Date` ) 
-pat2$DischargeDateD   &lt;- as.Date( pat2$`Discharge_Date` )
+<pre class="r"><code>pat2$AdmitDateD &lt;- as.Date(pat2$`Admit_Date`) 
+pat2$DischargeDateD &lt;- as.Date(pat2$`Discharge_Date`)
 
-min(pat2$DischargeDateD ) #  &quot;2016-09-01&quot;</code></pre>
+min(pat2$DischargeDateD) # '2016-09-01'</code></pre>
 <pre><code>## [1] &quot;2016-09-01&quot;</code></pre>
-<pre class="r"><code>max(pat2$DischargeDateD ) #  &quot;2017-12-31&quot;</code></pre>
+<pre class="r"><code>max(pat2$DischargeDateD) # '2017-12-31'</code></pre>
 <pre><code>## [1] &quot;2017-12-31&quot;</code></pre>
 <p>Recode race categories in the new discharge data for FY 2017 using the xwalk to make uniform values</p>
 <pre class="r"><code>racexwalk &lt;- read_csv(&quot;~/Box Sync/VBM/Data/race_xwalk.csv&quot;)</code></pre>

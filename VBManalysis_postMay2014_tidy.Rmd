@@ -88,18 +88,18 @@ pat2 <- pat2 %>%
 Check the date ranges in each dataset
 ```{r}
 NROW(pat)
-pat$AdmitDateD   <- as.Date( pat$`Admit_Date` )
-pat$DischargeDateD   <- as.Date( pat$`Discharge_Date` )
+pat$AdmitDateD <- as.Date(pat$`Admit_Date`)
+pat$DischargeDateD <- as.Date(pat$`Discharge_Date`)
 
-min(pat$DischargeDateD ) # "2010-09-01"
-max(pat$DischargeDateD ) #  "2017-05-31"
+min(pat$DischargeDateD) # '2010-09-01'
+max(pat$DischargeDateD) # '2017-05-31'
 
 NROW(pat2)
-pat2$AdmitDateD   <- as.Date( pat2$`Admit_Date` ) 
-pat2$DischargeDateD   <- as.Date( pat2$`Discharge_Date` )
+pat2$AdmitDateD <- as.Date(pat2$`Admit_Date`) 
+pat2$DischargeDateD <- as.Date(pat2$`Discharge_Date`)
 
-min(pat2$DischargeDateD ) #  "2016-09-01"
-max(pat2$DischargeDateD ) #  "2017-12-31"
+min(pat2$DischargeDateD) # '2016-09-01'
+max(pat2$DischargeDateD) # '2017-12-31'
 ```
 
 Recode race categories in the new discharge data for FY 2017 using the xwalk to make uniform values  
